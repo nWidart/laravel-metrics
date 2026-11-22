@@ -1,0 +1,66 @@
+---
+title: Laravel Metrics
+description: OpenTelemetry metrics for Laravel that work under PHP-FPM. Zero-code HTTP, database, queue, cache, scheduler and exception metrics, served to Prometheus or pushed over OTLP.
+template: splash
+hero:
+  tagline: OpenTelemetry metrics for Laravel that work under PHP-FPM. Install the package, and HTTP requests, queries, queue jobs, cache operations, scheduled tasks and exceptions are recorded with no code.
+  actions:
+    - text: Record your first metrics
+      link: /laravel-metrics/tutorials/first-metrics/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/nWidart/laravel-metrics
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+```bash
+composer require nwidart/laravel-metrics
+```
+
+<CardGrid>
+	<Card title="Zero-code instrumentation" icon="rocket">
+		`http.server.request.duration`, `db.client.operation.duration`, `messaging.process.duration`,
+		cache operations, scheduled tasks and reported exceptions, with the names of the
+		OpenTelemetry semantic conventions.
+	</Card>
+	<Card title="Built for PHP-FPM" icon="setting">
+		Each request records in memory, then merges into Redis after the response is sent. Every
+		worker and every host adds up in one store.
+	</Card>
+	<Card title="Prometheus or OTLP" icon="external">
+		Serve `GET /metrics` in the Prometheus text format, or push to an OpenTelemetry Collector or
+		any OTLP backend with `php artisan metrics:push`.
+	</Card>
+	<Card title="Safe by default" icon="approve-check">
+		A Redis failure never fails a request. Cardinality is bounded, and the scrape route is off
+		until you turn it on.
+	</Card>
+</CardGrid>
+
+## Find your way
+
+<CardGrid>
+	<LinkCard
+		title="Tutorial"
+		description="New here? Install the package in a fresh application and see your first metrics in ten minutes."
+		href="/laravel-metrics/tutorials/first-metrics/"
+	/>
+	<LinkCard
+		title="How-to guides"
+		description="Set up production, scrape with Prometheus, push over OTLP, add attributes and test your metrics."
+		href="/laravel-metrics/guides/install-in-production/"
+	/>
+	<LinkCard
+		title="Reference"
+		description="Every configuration key, facade method, command and built-in metric."
+		href="/laravel-metrics/reference/configuration/"
+	/>
+	<LinkCard
+		title="Explanation"
+		description="Why the package merges into a store, what it costs, and how it names and bounds metrics."
+		href="/laravel-metrics/explanation/how-it-works/"
+	/>
+</CardGrid>
