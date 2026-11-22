@@ -130,11 +130,21 @@ Metrics::onExport(function (MeterProviderInterface $provider): void {
 
 A callback that throws is reported and skipped.
 
+## What an export sends
+
+The scrape and `metrics:push` both send `Metrics::export()`: the cumulative values of the store and the metrics read on export. While metrics are disabled (`METRICS_ENABLED=false`) an export sends nothing, even if the store still holds older values. Leave metrics out of every export with a filter that returns `true` for them, for example the stored series of a meter you no longer record:
+
+```php
+use OpenTelemetry\SDK\Metrics\Data\Metric;
+
+Metrics::exclude(fn (Metric $metric): bool => str_starts_with($metric->name, 'legacy.'));
+```
+
 ## Prometheus
 
 Turn on the scrape route with `METRICS_PROMETHEUS=true`. `GET /metrics` then serves the store in the Prometheus text format (version 0.0.4). The names follow the OpenTelemetry Prometheus compatibility rules: `http.server.request.duration` in seconds becomes `http_server_request_duration_seconds`, and a counter ends in `_total`. Every sample has the `otel_scope_name` label.
 
-The route is off by default, because metrics can tell more about the application than it should share. Protect it with `prometheus.middleware` or with the network. Change the path with `METRICS_PROMETHEUS_PATH`, and add labels to every sample with `prometheus.labels`, for example `['service' => 'shop']`. If the store cannot be read, the route answers 503, so Prometheus marks the target down. The scrape is an HTTP request like the others: it is recorded in `http.server.request.duration` with `http.route` = `/metrics`.
+The route is off by default, because metrics can tell more about the application than it should share. Protect it with `prometheus.middleware` or with the network. Change the path with `METRICS_PROMETHEUS_PATH`, and add labels to every sample with `prometheus.labels`, for example `['service' => 'shop']`. If the store cannot be built or read, the route answers 503, so Prometheus marks the target down. A store that cannot be built, such as an unknown `METRICS_STORE`, never fails the application's requests: it is reported, and nothing is recorded. The scrape is an HTTP request like the others: it is recorded in `http.server.request.duration` with `http.route` = `/metrics`.
 
 All workers and hosts share one store, so scrape one address, such as the load balancer.
 

@@ -6,10 +6,12 @@ namespace Nwidart\Metrics\Tests;
 
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Contracts\Foundation\Application;
+use Nwidart\Metrics\Facades\Metrics;
 use Nwidart\Metrics\Redis\LaravelRedisClient;
 use Nwidart\MetricsStore\MetricStore;
 use Nwidart\MetricsStore\RedisStore;
 use OpenTelemetry\API\Metrics\MeterProviderInterface;
+use OpenTelemetry\SDK\Metrics\Data\Metric;
 use Orchestra\Testbench\Attributes\DefineEnvironment;
 use PHPUnit\Framework\Attributes\Test;
 
@@ -67,6 +69,52 @@ final class PrometheusEndpointTest extends TestCase
 
         // The next resolution builds the reachable store again, for tearDown().
         $this->app->forgetInstance(MetricStore::class);
+    }
+
+    #[Test]
+    #[DefineEnvironment('enablePrometheus')]
+    public function a_store_that_cannot_be_built_answers_503(): void
+    {
+        $this->app['config']->set('metrics.store.driver', 'apcu');
+        $this->app->forgetInstance(MetricStore::class);
+
+        $this->get('/metrics')->assertStatus(503);
+        // The application itself keeps working.
+        $this->get('/')->assertNotFound();
+
+        // tearDown() clears the store.
+        $this->app['config']->set('metrics.store.driver', 'redis');
+        $this->app->forgetInstance(MetricStore::class);
+    }
+
+    #[Test]
+    #[DefineEnvironment('enablePrometheus')]
+    public function nothing_is_served_while_metrics_are_disabled(): void
+    {
+        $this->app->make(MeterProviderInterface::class)->getMeter('app')->createCounter('orders')->add(3);
+        $this->app->terminate();
+        // Turned off after the store was filled; another package's route can still call the controller.
+        $this->app['config']->set('metrics.enabled', false);
+
+        $response = $this->get('/metrics')->assertOk();
+
+        $this->assertSame('', $response->getContent());
+    }
+
+    #[Test]
+    #[DefineEnvironment('enablePrometheus')]
+    public function an_excluded_metric_is_not_served(): void
+    {
+        $meter = $this->app->make(MeterProviderInterface::class)->getMeter('app');
+        $meter->createCounter('orders')->add(1);
+        $meter->createCounter('refunds')->add(1);
+        $this->app->terminate();
+        Metrics::exclude(fn (Metric $metric): bool => $metric->name === 'refunds');
+
+        $output = (string) $this->get('/metrics')->getContent();
+
+        $this->assertStringContainsString('orders_total', $output);
+        $this->assertStringNotContainsString('refunds_total', $output);
     }
 
     protected function enablePrometheus(Application $app): void
