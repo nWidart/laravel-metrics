@@ -34,8 +34,12 @@ export default defineConfig({
 			],
 			sidebar: [
 				{
-					label: 'Tutorials',
-					items: [{ slug: 'tutorials/first-metrics' }],
+					label: 'Start here',
+					items: [
+						{ slug: 'introduction' },
+						{ slug: 'installation' },
+						{ label: 'Tutorial: your first metrics', slug: 'tutorials/first-metrics' },
+					],
 				},
 				{
 					label: 'How-to guides',
