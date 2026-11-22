@@ -23,6 +23,9 @@ Without Redis, for development, set `METRICS_STORE=cache` (see [Stores](#stores)
 
 ## How it works
 
+The store and the merge rules live in [`nwidart/metrics-store`](https://github.com/nWidart/metrics-store), which has no Laravel dependency; read its [design](https://github.com/nWidart/metrics-store/blob/main/docs/design.md) for the reasons.
+
+
 - Each request records through the OpenTelemetry SDK, with delta temporality.
 - After the response is sent (`terminating`), the request merges its delta into Redis with one script call. A queue worker merges after each job.
 - The store keeps the cumulative values for all workers and hosts.
@@ -192,3 +195,18 @@ To change the defaults, publish the configuration file:
 ```bash
 php artisan vendor:publish --tag=metrics-config
 ```
+
+## Development
+
+Requirements: PHP 8.2 or later, Composer, and a Redis server for the tests.
+
+```bash
+composer install
+docker run -d --name laravel-metrics-redis -p 6379:6379 redis:7.4-alpine
+composer test
+composer lint
+composer analyse
+```
+
+The tests use Redis database 15. Set `REDIS_HOST` and `REDIS_PORT` to use another server. They use phpredis when `ext-redis` is loaded, and predis otherwise.
+
