@@ -35,10 +35,18 @@ By default the package's meter provider is also the OpenTelemetry global (`Globa
 | `db.client.operation.duration` (histogram, seconds) | `db.system.name`, `db.namespace`, `db.operation.name`, `server.address`, `server.port` |
 | `messaging.process.duration` (histogram, seconds) | `messaging.system`, `messaging.operation.name` (`process`), `messaging.destination.name`, `laravel.job.name`, `error.type` |
 | `messaging.client.sent.messages` (counter) | `messaging.system`, `messaging.operation.name` (`send`), `messaging.destination.name`, `laravel.job.name` |
+| `laravel.cache.operations` (counter) | `laravel.cache.store`, `laravel.cache.operation` (`read`, `write`, `delete`), `laravel.cache.result` (`hit`, `miss`, `success`, `failure`) |
 
 The database listener costs about 2 µs per query. Laravel dispatches no event for a failed query, so failed queries are not recorded.
 
 `messaging.process.duration` has one value per attempt. An attempt that throws has the exception class as `error.type`; a job that fails itself, or has no attempts left, has `error.type` = `failed`. `laravel.job.name` is the job class, which the conventions do not define. A queue worker merges after each job; a sync job merges with the request or command that dispatched it.
+
+The OpenTelemetry semantic conventions define no cache metrics, so `laravel.cache.operations` and its attributes use the `laravel.` namespace. It counts Laravel's cache events, per store: a read is a hit or a miss, and a write or a delete is a success or a failure. The hit ratio is `hit / (hit + miss)`. The cache key is never an attribute. The listener costs about 1.5 µs per cache event, and about 3 µs with Laravel's event dispatch. Limits:
+
+- No duration: on Laravel 12.0, timing an operation would need state per key, and `many` has one start event for several keys.
+- Operations that dispatch no event are not counted: `increment`, `decrement`, `flush`, locks, and `add` with a TTL on a store that adds natively (Redis, Memcached, database, DynamoDB, file).
+- `many` and `putMany` count one operation per key. `remember` counts a read, then a write on a miss.
+- A store with `'events' => false` in `config/cache.php` dispatches no events and is not counted. The memoized store (`Cache::memo()`) is not counted; the store under it is, on a memo miss. A failover store is counted under the name of the store that ran the operation.
 
 ## Production
 

@@ -37,7 +37,7 @@ return [
 
     /*
     | Built-in instrumentation, following the OpenTelemetry semantic
-    | conventions.
+    | conventions where they define the metric.
     */
     'instrumentation' => [
         // http.server.request.duration
@@ -46,6 +46,8 @@ return [
         'db' => env('METRICS_DB', true),
         // messaging.process.duration and messaging.client.sent.messages
         'queue' => env('METRICS_QUEUE', true),
+        // laravel.cache.operations: reads (hit, miss), writes and deletes, per store
+        'cache' => env('METRICS_CACHE', true),
     ],
 
 ];

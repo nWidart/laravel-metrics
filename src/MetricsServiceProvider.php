@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 namespace Nwidart\Metrics;
 
+use Illuminate\Cache\Events\CacheHit;
+use Illuminate\Cache\Events\CacheMissed;
+use Illuminate\Cache\Events\KeyForgetFailed;
+use Illuminate\Cache\Events\KeyForgotten;
+use Illuminate\Cache\Events\KeyWriteFailed;
+use Illuminate\Cache\Events\KeyWritten;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Events\QueryExecuted;
@@ -15,6 +21,7 @@ use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Queue\Events\JobQueued;
 use Illuminate\Queue\Jobs\SyncJob;
 use Illuminate\Support\ServiceProvider;
+use Nwidart\Metrics\Instrumentation\CacheMetrics;
 use Nwidart\Metrics\Instrumentation\DatabaseClientMetrics;
 use Nwidart\Metrics\Instrumentation\HttpServerMetrics;
 use Nwidart\Metrics\Instrumentation\QueueMetrics;
@@ -69,6 +76,7 @@ final class MetricsServiceProvider extends ServiceProvider
         $this->app->singleton(HttpServerMetrics::class);
         $this->app->singleton(DatabaseClientMetrics::class);
         $this->app->singleton(QueueMetrics::class);
+        $this->app->singleton(CacheMetrics::class);
     }
 
     public function boot(): void
@@ -103,6 +111,14 @@ final class MetricsServiceProvider extends ServiceProvider
             $events->listen(JobProcessing::class, [QueueMetrics::class, 'processing']);
             $events->listen(JobProcessed::class, [QueueMetrics::class, 'processed']);
             $events->listen(JobExceptionOccurred::class, [QueueMetrics::class, 'exceptionOccurred']);
+        }
+        if ($this->config()->get('metrics.instrumentation.cache')) {
+            $events->listen(CacheHit::class, [CacheMetrics::class, 'hit']);
+            $events->listen(CacheMissed::class, [CacheMetrics::class, 'missed']);
+            $events->listen(KeyWritten::class, [CacheMetrics::class, 'written']);
+            $events->listen(KeyWriteFailed::class, [CacheMetrics::class, 'writeFailed']);
+            $events->listen(KeyForgotten::class, [CacheMetrics::class, 'forgotten']);
+            $events->listen(KeyForgetFailed::class, [CacheMetrics::class, 'forgetFailed']);
         }
 
         // A queue worker runs many jobs in one process: merge after each one. Registered after the
