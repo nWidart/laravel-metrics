@@ -32,6 +32,9 @@ By default the package's meter provider is also the OpenTelemetry global (`Globa
 | Metric | Attributes |
 |---|---|
 | `http.server.request.duration` (histogram, seconds) | `http.request.method`, `http.route`, `http.response.status_code`, `url.scheme`, `network.protocol.version`, `error.type` |
+| `db.client.operation.duration` (histogram, seconds) | `db.system.name`, `db.namespace`, `db.operation.name`, `server.address`, `server.port` |
+
+The database listener costs about 2 µs per query. Laravel dispatches no event for a failed query, so failed queries are not recorded.
 
 ## Production
 

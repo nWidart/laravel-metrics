@@ -6,10 +6,12 @@ namespace Nwidart\Metrics;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Support\ServiceProvider;
+use Nwidart\Metrics\Instrumentation\DatabaseClientMetrics;
 use Nwidart\Metrics\Instrumentation\HttpServerMetrics;
 use Nwidart\Metrics\Redis\LaravelRedisClient;
 use Nwidart\MetricsStore\RedisStore;
@@ -57,6 +59,10 @@ final class MetricsServiceProvider extends ServiceProvider
                 ->build();
         });
         $this->app->alias(MeterProviderInterface::class, ApiMeterProvider::class);
+
+        // Singletons: Laravel would otherwise build a listener, and its instrument, on every event.
+        $this->app->singleton(HttpServerMetrics::class);
+        $this->app->singleton(DatabaseClientMetrics::class);
     }
 
     public function boot(): void
@@ -85,6 +91,9 @@ final class MetricsServiceProvider extends ServiceProvider
 
         if ($this->config()->get('metrics.instrumentation.http')) {
             $events->listen(RequestHandled::class, [HttpServerMetrics::class, 'handle']);
+        }
+        if ($this->config()->get('metrics.instrumentation.db')) {
+            $events->listen(QueryExecuted::class, [DatabaseClientMetrics::class, 'handle']);
         }
     }
 
