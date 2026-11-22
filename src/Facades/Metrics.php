@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Facade;
  * @method static void attributes(string $metric, \Closure $callback)
  * @method static void onExport(\Closure $callback)
  * @method static void flush()
+ * @method static void exclude(\Closure $filter)
+ * @method static list<\OpenTelemetry\SDK\Metrics\Data\Metric> export(\OpenTelemetry\SDK\Resource\ResourceInfo $resource)
  * @method static \Nwidart\Metrics\Testing\MetricsFake fake()
  *
  * @see \Nwidart\Metrics\Metrics

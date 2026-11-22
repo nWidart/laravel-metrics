@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: the `Metrics` facade did not declare `exclude()` and `export()`, so IDEs and static analysis flagged them.
+
 ## 0.2.0 - 2026-11-22
 
 - Added `Metrics::export()`, what the scrape and `metrics:push` send, and `Metrics::exclude()` to leave metrics out of every export.
