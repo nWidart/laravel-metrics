@@ -11,6 +11,7 @@
     ],
     "homepage": "https://github.com/nWidart/laravel-metrics",
     "support": {
+        "docs": "https://nwidart.github.io/laravel-metrics/",
         "issues": "https://github.com/nWidart/laravel-metrics/issues",
         "source": "https://github.com/nWidart/laravel-metrics"
     },
