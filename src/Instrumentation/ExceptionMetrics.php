@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nwidart\Metrics\Instrumentation;
 
+use Nwidart\Metrics\AttributeContributors;
 use OpenTelemetry\API\Metrics\CounterInterface;
 use OpenTelemetry\API\Metrics\MeterProviderInterface;
 use Throwable;
@@ -21,7 +22,7 @@ final class ExceptionMetrics
 {
     private readonly CounterInterface $exceptions;
 
-    public function __construct(MeterProviderInterface $meterProvider)
+    public function __construct(MeterProviderInterface $meterProvider, private readonly AttributeContributors $contributors)
     {
         $this->exceptions = $meterProvider->getMeter('nwidart/laravel-metrics')->createCounter(
             'laravel.exceptions',
@@ -36,6 +37,9 @@ final class ExceptionMetrics
         // An anonymous class name holds a file path and a NUL byte.
         $anonymous = strpos($class, '@anonymous');
 
-        $this->exceptions->add(1, ['exception.type' => $anonymous === false ? $class : substr($class, 0, $anonymous + 10)]);
+        $this->exceptions->add(1, [
+            'exception.type' => $anonymous === false ? $class : substr($class, 0, $anonymous + 10),
+            ...$this->contributors->for('laravel.exceptions', $e),
+        ]);
     }
 }

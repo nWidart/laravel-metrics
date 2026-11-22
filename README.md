@@ -54,6 +54,31 @@ The OpenTelemetry semantic conventions define no cache metrics, so `laravel.cach
 - `many` and `putMany` count one operation per key. `remember` counts a read, then a write on a miss.
 - A store with `'events' => false` in `config/cache.php` dispatches no events and is not counted. The memoized store (`Cache::memo()`) is not counted; the store under it is, on a memo miss. A failover store is counted under the name of the store that ran the operation.
 
+### Add attributes to the built-in metrics
+
+Add attributes, such as a tenant or a module, from a service provider. The callback receives what the measurement is about, and its attributes win over built-in ones of the same name:
+
+```php
+use Illuminate\Foundation\Http\Events\RequestHandled;
+use Nwidart\Metrics\AttributeContributors;
+
+app(AttributeContributors::class)->add('http.server.request.duration', fn (RequestHandled $event): array => [
+    'app.tenant' => $event->request->user()?->tenant->slug ?? 'none',
+]);
+```
+
+| Metric | The callback receives |
+|---|---|
+| `http.server.request.duration` | `Illuminate\Foundation\Http\Events\RequestHandled` |
+| `db.client.operation.duration` | `Illuminate\Database\Events\QueryExecuted` |
+| `messaging.process.duration` | `JobProcessed`, `JobExceptionOccurred` or `JobTimedOut` |
+| `messaging.client.sent.messages` | `JobQueued` |
+| `laravel.cache.operations` | the `Illuminate\Cache\Events\CacheEvent` |
+| `laravel.scheduler.task.duration` | `ScheduledTaskFinished` or `ScheduledTaskFailed` |
+| `laravel.exceptions` | the `Throwable` |
+
+Each distinct value is a new series, so keep the values few. Overriding a built-in attribute also bounds it: `fn () => ['messaging.destination.name' => 'tenant']` puts every queue under one name when you create queues at runtime. A callback runs inside the work it describes, so nothing it does can fail that work: one that throws is reported once and skipped, and a value that is not a string, a number or a boolean is dropped. The measurements a callback causes itself, such as a query, get no contributed attributes, so a callback never calls itself.
+
 ## Metrics read on export
 
 These are read when the metrics are exported (a scrape of `/metrics`, or `metrics:push`) and never stored. They describe the process and the server that export them, not the whole application. Requests pay nothing for them. Turn them off with `METRICS_RUNTIME=false`.

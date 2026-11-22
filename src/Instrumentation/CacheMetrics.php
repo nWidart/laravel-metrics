@@ -11,6 +11,7 @@ use Illuminate\Cache\Events\KeyForgetFailed;
 use Illuminate\Cache\Events\KeyForgotten;
 use Illuminate\Cache\Events\KeyWriteFailed;
 use Illuminate\Cache\Events\KeyWritten;
+use Nwidart\Metrics\AttributeContributors;
 use OpenTelemetry\API\Metrics\CounterInterface;
 use OpenTelemetry\API\Metrics\MeterProviderInterface;
 
@@ -32,7 +33,7 @@ final class CacheMetrics
 {
     private readonly CounterInterface $operations;
 
-    public function __construct(MeterProviderInterface $meterProvider)
+    public function __construct(MeterProviderInterface $meterProvider, private readonly AttributeContributors $contributors)
     {
         $this->operations = $meterProvider->getMeter('nwidart/laravel-metrics')->createCounter(
             'laravel.cache.operations',
@@ -78,6 +79,6 @@ final class CacheMetrics
             $attributes['laravel.cache.store'] = $event->storeName;
         }
 
-        $this->operations->add(1, $attributes);
+        $this->operations->add(1, [...$attributes, ...$this->contributors->for('laravel.cache.operations', $event)]);
     }
 }

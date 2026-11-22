@@ -6,6 +6,7 @@ namespace Nwidart\Metrics\Instrumentation;
 
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Routing\Route;
+use Nwidart\Metrics\AttributeContributors;
 use OpenTelemetry\API\Metrics\HistogramInterface;
 use OpenTelemetry\API\Metrics\MeterProviderInterface;
 
@@ -24,7 +25,7 @@ final class HttpServerMetrics
 
     private readonly HistogramInterface $duration;
 
-    public function __construct(MeterProviderInterface $meterProvider)
+    public function __construct(MeterProviderInterface $meterProvider, private readonly AttributeContributors $contributors)
     {
         $this->duration = $meterProvider->getMeter('nwidart/laravel-metrics')->createHistogram(
             'http.server.request.duration',
@@ -60,6 +61,6 @@ final class HttpServerMetrics
         $startedAt = $request->server('REQUEST_TIME_FLOAT');
         $elapsed = is_numeric($startedAt) ? microtime(true) - (float) $startedAt : 0.0;
 
-        $this->duration->record(max(0.0, $elapsed), $attributes);
+        $this->duration->record(max(0.0, $elapsed), [...$attributes, ...$this->contributors->for('http.server.request.duration', $event)]);
     }
 }

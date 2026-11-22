@@ -12,6 +12,7 @@ use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Queue\Events\JobQueued;
 use Illuminate\Queue\Events\JobTimedOut;
 use Illuminate\Queue\TimeoutExceededException;
+use Nwidart\Metrics\AttributeContributors;
 use OpenTelemetry\API\Metrics\CounterInterface;
 use OpenTelemetry\API\Metrics\HistogramInterface;
 use OpenTelemetry\API\Metrics\MeterProviderInterface;
@@ -43,7 +44,7 @@ final class QueueMetrics
     /** @var array<string, string> connection name => messaging.system */
     private array $systems = [];
 
-    public function __construct(MeterProviderInterface $meterProvider, private readonly Repository $config)
+    public function __construct(MeterProviderInterface $meterProvider, private readonly Repository $config, private readonly AttributeContributors $contributors)
     {
         $meter = $meterProvider->getMeter('nwidart/laravel-metrics');
         $this->duration = $meter->createHistogram(
@@ -63,18 +64,18 @@ final class QueueMetrics
     public function processed(JobProcessed $event): void
     {
         // A job that failed itself ($this->fail()) or that had no attempts left still ends here.
-        $this->recordProcess($event->connectionName, $event->job, $event->job->hasFailed() ? 'failed' : null);
+        $this->recordProcess($event, $event->job->hasFailed() ? 'failed' : null);
     }
 
     public function exceptionOccurred(JobExceptionOccurred $event): void
     {
-        $this->recordProcess($event->connectionName, $event->job, $event->exception::class);
+        $this->recordProcess($event, $event->exception::class);
     }
 
     /** The worker stopped the attempt at its timeout, and kills itself next. */
     public function timedOut(JobTimedOut $event): void
     {
-        $this->recordProcess($event->connectionName, $event->job, TimeoutExceededException::class);
+        $this->recordProcess($event, TimeoutExceededException::class);
     }
 
     public function queued(JobQueued $event): void
@@ -89,11 +90,12 @@ final class QueueMetrics
             $attributes['messaging.destination.name'] = $queue;
         }
 
-        $this->sent->add(1, $attributes);
+        $this->sent->add(1, [...$attributes, ...$this->contributors->for('messaging.client.sent.messages', $event)]);
     }
 
-    private function recordProcess(string $connectionName, Job $job, ?string $errorType): void
+    private function recordProcess(JobProcessed|JobExceptionOccurred|JobTimedOut $event, ?string $errorType): void
     {
+        [$connectionName, $job] = [$event->connectionName, $event->job];
         $id = spl_object_id($job);
         if (! isset($this->started[$id])) {
             return;
@@ -114,7 +116,7 @@ final class QueueMetrics
             $attributes['error.type'] = $errorType;
         }
 
-        $this->duration->record(max(0.0, $elapsed), $attributes);
+        $this->duration->record(max(0.0, $elapsed), [...$attributes, ...$this->contributors->for('messaging.process.duration', $event)]);
     }
 
     private function system(string $connectionName): string

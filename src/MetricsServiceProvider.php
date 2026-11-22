@@ -134,6 +134,7 @@ final class MetricsServiceProvider extends ServiceProvider
         $this->app->singleton(SchedulerMetrics::class);
         $this->app->singleton(ExceptionMetrics::class);
         $this->app->singleton(ExportTimeMetrics::class);
+        $this->app->singleton(AttributeContributors::class);
     }
 
     public function boot(): void

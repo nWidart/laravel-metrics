@@ -6,6 +6,7 @@ namespace Nwidart\Metrics\Instrumentation;
 
 use Illuminate\Database\Connection;
 use Illuminate\Database\Events\QueryExecuted;
+use Nwidart\Metrics\AttributeContributors;
 use OpenTelemetry\API\Metrics\HistogramInterface;
 use OpenTelemetry\API\Metrics\MeterProviderInterface;
 
@@ -43,7 +44,7 @@ final class DatabaseClientMetrics
     /** @var array<string, array<non-empty-string, string|int>> connection name => attributes */
     private array $connections = [];
 
-    public function __construct(MeterProviderInterface $meterProvider)
+    public function __construct(MeterProviderInterface $meterProvider, private readonly AttributeContributors $contributors)
     {
         $this->duration = $meterProvider->getMeter('nwidart/laravel-metrics')->createHistogram(
             'db.client.operation.duration',
@@ -64,7 +65,7 @@ final class DatabaseClientMetrics
             }
         }
 
-        $this->duration->record(max(0.0, (float) $event->time / 1000), $attributes);
+        $this->duration->record(max(0.0, (float) $event->time / 1000), [...$attributes, ...$this->contributors->for('db.client.operation.duration', $event)]);
     }
 
     /**

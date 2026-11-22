@@ -8,6 +8,7 @@ use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Console\Scheduling\Event;
+use Nwidart\Metrics\AttributeContributors;
 use OpenTelemetry\API\Metrics\HistogramInterface;
 use OpenTelemetry\API\Metrics\MeterProviderInterface;
 
@@ -31,7 +32,7 @@ final class SchedulerMetrics
     /** @var array<int, float> spl_object_id of the task => start, in seconds */
     private array $started = [];
 
-    public function __construct(MeterProviderInterface $meterProvider)
+    public function __construct(MeterProviderInterface $meterProvider, private readonly AttributeContributors $contributors)
     {
         $this->duration = $meterProvider->getMeter('nwidart/laravel-metrics')->createHistogram(
             'laravel.scheduler.task.duration',
@@ -56,16 +57,17 @@ final class SchedulerMetrics
             return;
         }
 
-        $this->record($task, $task->exitCode !== null && $task->exitCode !== 0 ? 'failed' : null);
+        $this->record($event, $task->exitCode !== null && $task->exitCode !== 0 ? 'failed' : null);
     }
 
     public function failed(ScheduledTaskFailed $event): void
     {
-        $this->record($event->task, $event->exception::class);
+        $this->record($event, $event->exception::class);
     }
 
-    private function record(Event $task, ?string $errorType): void
+    private function record(ScheduledTaskFinished|ScheduledTaskFailed $event, ?string $errorType): void
     {
+        $task = $event->task;
         $id = spl_object_id($task);
         // Already recorded: a task can finish with a failure code and then fail.
         if (! isset($this->started[$id])) {
@@ -79,7 +81,7 @@ final class SchedulerMetrics
             $attributes['error.type'] = $errorType;
         }
 
-        $this->duration->record(max(0.0, $elapsed), $attributes);
+        $this->duration->record(max(0.0, $elapsed), [...$attributes, ...$this->contributors->for('laravel.scheduler.task.duration', $event)]);
     }
 
     /**
