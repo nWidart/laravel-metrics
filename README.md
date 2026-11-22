@@ -56,6 +56,20 @@ The route is off by default, because metrics can tell more about the application
 
 All workers and hosts share one store, so scrape one address, such as the load balancer.
 
+## OTLP push
+
+`php artisan metrics:push` sends the store to an OTLP/HTTP endpoint, such as an OpenTelemetry Collector or a backend that accepts OTLP. Each run sends the totals so far (cumulative), so a lost or repeated push does no harm. Schedule it in `routes/console.php`:
+
+```php
+use Illuminate\Support\Facades\Schedule;
+
+Schedule::command('metrics:push')->everyMinute();
+```
+
+Set the endpoint with `OTEL_EXPORTER_OTLP_ENDPOINT`, for example `http://collector:4318`; `/v1/metrics` is appended. `OTEL_EXPORTER_OTLP_PROTOCOL` is `http/protobuf` (default) or `http/json`. Headers, such as an API key, go in `metrics.push.headers`. These values are read through `config/metrics.php`, so they work with `php artisan config:cache`.
+
+The resource is `service.name` (`OTEL_SERVICE_NAME`, or `APP_NAME`) and `deployment.environment.name` (`APP_ENV`), with any attribute you add in `metrics.push.resource`. It has no host or process attributes, because the store holds the totals of every process and host. The push needs a PSR-18 HTTP client; Guzzle, which Laravel applications usually have, is one.
+
 ## Stores
 
 | `METRICS_STORE` | Use it for | Notes |

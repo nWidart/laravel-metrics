@@ -26,6 +26,7 @@ use Illuminate\Queue\Events\JobQueued;
 use Illuminate\Queue\Jobs\SyncJob;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
+use Nwidart\Metrics\Console\PushCommand;
 use Nwidart\Metrics\Http\PrometheusController;
 use Nwidart\Metrics\Instrumentation\CacheMetrics;
 use Nwidart\Metrics\Instrumentation\DatabaseClientMetrics;
@@ -39,8 +40,12 @@ use Nwidart\MetricsStore\StoreExporter;
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Instrumentation\Configurator;
 use OpenTelemetry\API\Metrics\MeterProviderInterface as ApiMeterProvider;
+use OpenTelemetry\Contrib\Otlp\ContentTypes;
+use OpenTelemetry\Contrib\Otlp\MetricExporter;
+use OpenTelemetry\Contrib\Otlp\OtlpHttpTransportFactory;
 use OpenTelemetry\SDK\Metrics\MeterProviderBuilder;
 use OpenTelemetry\SDK\Metrics\MeterProviderInterface;
+use OpenTelemetry\SDK\Metrics\MetricExporterInterface;
 use OpenTelemetry\SDK\Metrics\MetricReader\ExportingReader;
 use OpenTelemetry\SDK\Metrics\NoopMeterProvider;
 use OpenTelemetry\SDK\Resource\ResourceInfoFactory;
@@ -81,6 +86,37 @@ final class MetricsServiceProvider extends ServiceProvider
         });
         $this->app->alias(MeterProviderInterface::class, ApiMeterProvider::class);
 
+        // Built from the configuration, not from OTEL_* variables, so that it works with a cached
+        // configuration, which leaves .env unread.
+        $this->app->bind(MetricExporterInterface::class, function (): MetricExporterInterface {
+            $config = $this->config();
+            $endpoint = $config->get('metrics.push.endpoint');
+            $protocol = $config->get('metrics.push.protocol');
+            $headers = $config->get('metrics.push.headers');
+            $timeout = $config->get('metrics.push.timeout');
+            if (! is_string($endpoint) || $endpoint === '') {
+                throw new InvalidArgumentException('Set metrics.push.endpoint (OTEL_EXPORTER_OTLP_ENDPOINT) to push metrics.');
+            }
+
+            $sent = [];
+            foreach (is_array($headers) ? $headers : [] as $name => $value) {
+                if (is_string($value)) {
+                    $sent[(string) $name] = $value;
+                }
+            }
+
+            $transport = (new OtlpHttpTransportFactory)->create(
+                rtrim($endpoint, '/').'/v1/metrics',
+                $protocol === 'http/json' ? ContentTypes::JSON : ContentTypes::PROTOBUF,
+                $sent,
+                null,
+                is_numeric($timeout) ? (float) $timeout : 10.0,
+            );
+
+            // The store's metrics are cumulative already; the exporter sends what it receives.
+            return new MetricExporter($transport);
+        });
+
         // Singletons: Laravel would otherwise build a listener, and its instrument, on every event.
         $this->app->singleton(HttpServerMetrics::class);
         $this->app->singleton(DatabaseClientMetrics::class);
@@ -94,6 +130,8 @@ final class MetricsServiceProvider extends ServiceProvider
             $this->publishes([
                 __DIR__.'/../config/metrics.php' => config_path('metrics.php'),
             ], 'metrics-config');
+
+            $this->commands([PushCommand::class]);
         }
 
         if (! $this->enabled()) {

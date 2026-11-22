@@ -56,6 +56,24 @@ return [
     ],
 
     /*
+    | `php artisan metrics:push` sends the store to an OTLP/HTTP endpoint,
+    | such as an OpenTelemetry Collector. Schedule it, for example every
+    | minute. "/v1/metrics" is appended to the endpoint. The protocol is
+    | "http/protobuf" or "http/json". The resource attributes describe the
+    | whole application: the store aggregates every process and host.
+    */
+    'push' => [
+        'endpoint' => env('OTEL_EXPORTER_OTLP_ENDPOINT'),
+        'protocol' => env('OTEL_EXPORTER_OTLP_PROTOCOL', 'http/protobuf'),
+        'headers' => [],
+        'timeout' => 10,
+        'resource' => [
+            'service.name' => env('OTEL_SERVICE_NAME', env('APP_NAME', 'laravel')),
+            'deployment.environment.name' => env('APP_ENV'),
+        ],
+    ],
+
+    /*
     | Built-in instrumentation, following the OpenTelemetry semantic
     | conventions where they define the metric.
     */
