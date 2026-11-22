@@ -8,6 +8,8 @@ OpenTelemetry metrics for Laravel that work under PHP-FPM.
 
 The package records HTTP requests, queries, queue jobs, cache operations, scheduled tasks and exceptions with no code. Each request records in memory and merges into Redis after the response. Serve the metrics to Prometheus, or push them over OTLP.
 
+**Documentation: https://nwidart.github.io/laravel-metrics/**. It has a tutorial, how-to guides, the full reference and explanations. This README is a summary.
+
 - [How it works](#how-it-works)
 - [Installation](#installation)
 - [Configuration](#configuration)
