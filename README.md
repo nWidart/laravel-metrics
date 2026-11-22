@@ -95,7 +95,7 @@ php artisan vendor:publish --tag=metrics-config
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `push.protocol` | `http/protobuf` | `http/protobuf` or `http/json`. |
 | `OTEL_SERVICE_NAME` | `push.resource.service.name` | `APP_NAME`, else `laravel` | The `service.name` resource attribute. |
 | `APP_ENV` | `push.resource.deployment.environment.name` | None | The `deployment.environment.name` resource attribute. |
-| `METRICS_HTTP`, `METRICS_DB`, `METRICS_QUEUE`, `METRICS_CACHE`, `METRICS_SCHEDULER`, `METRICS_EXCEPTIONS`, `METRICS_RUNTIME` | `instrumentation.*` | `true` | Turns one built-in instrumentation off. |
+| `METRICS_HTTP`, `METRICS_DB`, `METRICS_ELOQUENT`, `METRICS_QUEUE`, `METRICS_CACHE`, `METRICS_SCHEDULER`, `METRICS_EXCEPTIONS`, `METRICS_RUNTIME`, `METRICS_DB_SERVER`, `METRICS_MIGRATIONS` | `instrumentation.*` | `true` | Turns one built-in instrumentation off. |
 
 These keys have no variable:
 
@@ -159,11 +159,16 @@ Metrics::attributes('http.server.request.duration', fn (RequestHandled $event): 
 |---|---|
 | `http.server.request.duration` | `Illuminate\Foundation\Http\Events\RequestHandled` |
 | `db.client.operation.duration` | `Illuminate\Database\Events\QueryExecuted` |
+| `laravel.db.transaction.duration` | `TransactionCommitted` or `TransactionRolledBack` |
+| `laravel.db.queries` | `RequestHandled`, `JobProcessed`, `JobExceptionOccurred` or `JobTimedOut` |
+| `laravel.eloquent.models.pruned` | `Illuminate\Database\Events\ModelsPruned` |
 | `messaging.process.duration` | `JobProcessed`, `JobExceptionOccurred` or `JobTimedOut` |
 | `messaging.client.sent.messages` | `JobQueued` |
 | `laravel.cache.operations` | The `Illuminate\Cache\Events\CacheEvent` |
 | `laravel.scheduler.task.duration` | `ScheduledTaskFinished` or `ScheduledTaskFailed` |
 | `laravel.exceptions` | The `Throwable` |
+
+`laravel.eloquent.models` takes no attributes: its models are added up long after their events.
 
 Each distinct value is a new series, so keep the values few. Overriding a built-in attribute also bounds it: `fn () => ['messaging.destination.name' => 'tenant']` puts every queue under one name when you create queues at runtime.
 
@@ -197,6 +202,10 @@ The callback runs once per export, in the export process. Requests only keep the
 |---|---|
 | `http.server.request.duration` (histogram, seconds) | `http.request.method`, `http.route`, `http.response.status_code`, `url.scheme`, `network.protocol.version`, `error.type` |
 | `db.client.operation.duration` (histogram, seconds) | `db.system.name`, `db.namespace`, `db.operation.name`, `server.address`, `server.port` |
+| `laravel.db.transaction.duration` (histogram, seconds) | `db.system.name`, `db.namespace`, `server.address`, `server.port`, `laravel.db.transaction.result` (`committed`, `rolled_back`) |
+| `laravel.db.queries` (histogram, queries) | `http.route` for a request, `laravel.job.name` for a queued job |
+| `laravel.eloquent.models` (counter) | `laravel.eloquent.event` (`retrieved`, `created`, `updated`, `deleted`, `restored`), `laravel.eloquent.model` |
+| `laravel.eloquent.models.pruned` (counter) | `laravel.eloquent.model` |
 | `messaging.process.duration` (histogram, seconds) | `messaging.system`, `messaging.operation.name` (`process`), `messaging.destination.name`, `laravel.job.name`, `error.type` |
 | `messaging.client.sent.messages` (counter) | `messaging.system`, `messaging.operation.name` (`send`), `messaging.destination.name`, `laravel.job.name` |
 | `laravel.scheduler.task.duration` (histogram, seconds) | `laravel.scheduler.task.name`, `error.type` |
@@ -222,6 +231,22 @@ A pattern that starts with `/` matches the URI template (`/up`). Any other patte
 ### Queries
 
 `db.client.operation.duration` has one value per successful query. `db.operation.name` is the first keyword of the query, such as `SELECT`, when it is one of a fixed list. Laravel dispatches no event for a failed query, so failed queries are not recorded. A connection with separate read and write hosts has no `server.address`.
+
+### Transactions
+
+`laravel.db.transaction.duration` has one value per outer transaction, from its beginning to its commit or rollback. Its count is the number of transactions, and the share of `rolled_back` is the rollback rate. A nested transaction (a savepoint) is part of its outer one. Laravel dispatches no event when a commit fails or the connection is lost, so such a transaction is not recorded.
+
+### Queries per request and per job
+
+`laravel.db.queries` has one value per HTTP request and per queued job: the number of successful queries it ran, on every connection. A route whose requests run many queries often has an N+1, a relation loaded once per model instead of once for all of them. The first bucket holds the requests and jobs that ran no query. Requests to `metrics.ignore_routes` are not recorded. A sync job's queries count for the request that dispatched it. Commands are not recorded.
+
+Transactions and query counts share the `db` switch (`METRICS_DB`) with `db.client.operation.duration`.
+
+### Eloquent models
+
+`laravel.eloquent.models` counts Eloquent's model events, per model class: `retrieved` once for each model a query returns, then `created`, `updated` (only when the model had changes), `deleted` (soft deletes too) and `restored`. A query that returns 10,000 rows dispatches 10,000 events, so the models are counted in memory and added to the counter when the metrics are flushed. Mass updates and deletes (`Order::where(...)->update()`) and models saved without events (`saveQuietly`, `withoutEvents`) dispatch no model event and are not counted.
+
+`laravel.eloquent.models.pruned` counts the models `model:prune` removes. Turn both off with `METRICS_ELOQUENT=false`.
 
 ### Queue jobs
 
@@ -276,8 +301,13 @@ These are read when the metrics are exported (a scrape of `/metrics`, or `metric
 | `php.fpm.connections.accepted`, `php.fpm.max_children_reached`, `php.fpm.slow_requests` (counters) | | Under PHP-FPM |
 | `system.cpu.load_average.1m` | | Not on Windows |
 | `system.filesystem.usage` (bytes) | `system.filesystem.state`: `used`, `free` | The disk that holds the application |
+| `laravel.db.server.connections` | `db.system.name`, `db.namespace`, `server.address`, `server.port` | The default connection is MySQL, MariaDB, PostgreSQL or SQL Server |
+| `laravel.db.server.connections.max` | The same | The default connection is MySQL, MariaDB, PostgreSQL or SQL Server |
+| `laravel.db.migrations.pending` | | Always |
 
 The semantic conventions define no PHP runtime metrics, so the PHP ones use a `php.` namespace, like `jvm.*` and `v8js.*`. `system.filesystem.usage` follows the conventions. `system.cpu.load_average.1m` is the name of the Collector's host metrics receiver.
+
+The database metrics run one query each on every export, and have their own switches: `METRICS_DB_SERVER` for the connections, `METRICS_MIGRATIONS` for the pending migrations. `laravel.db.server.connections` counts the connections open on the server of the default connection, from every client, as `php artisan db:monitor` does. On SQL Server, it counts only the running sessions. Under PHP-FPM, each busy worker holds one connection, so a server at its maximum refuses the next request's. `laravel.db.migrations.pending` is the number of migrations `php artisan migrate` would run: above 0 after a deploy, the code expects a schema the database does not have yet. A database that cannot be reached leaves these metrics out, without an error.
 
 OPcache is off on the command line by default, so `metrics:push` usually has no OPcache metrics. There are no metrics for the exporting process itself (CPU time, memory), because each export runs in another short-lived process.
 
@@ -405,12 +435,14 @@ There is no benchmark with a full Laravel application yet. The numbers come from
 | Record 8 values | About 30 µs |
 | Database listener, per query | About 2 µs, and about 3 µs with Laravel's event dispatch |
 | Cache listener, per cache event | About 1.5 µs, and about 3 µs with Laravel's event dispatch |
+| Eloquent listener, per model event | About 1.5 µs with Laravel's event dispatch, under 10% of the time Eloquent takes to hydrate a model from SQLite |
 | Merge, PHP worker time, after the response | 0.1 to 0.35 ms |
 | Merge, Redis CPU | About 25 µs for 8 values, 60–72 µs for a request with 30 queries |
 | Metrics read on export, per request | Nothing |
 
 - The boot, record and merge numbers come from the metrics-store benchmark: PHP 8.4 FPM without Laravel, opcache on, phpredis with a persistent connection, and a local Redis, in Docker on a laptop. See its [performance and overhead](https://github.com/nWidart/metrics-store#performance-and-overhead) for the effect on response latency.
 - The listener numbers come from a loop over the listener in Testbench, PHP 8.4 CLI, without Xdebug.
+- The Eloquent number comes from timing `Order::all()` over 10,000 SQLite rows in Testbench, with and without the listener.
 - The upper merge time comes from Testbench with predis and a local Redis: a request with 30 queries over 8 series, 6 cache counters and 1 HTTP value.
 
 While workers have spare capacity, the merge barely touches response latency. Under saturation it acts like extra request time, because a worker that is still merging cannot take the next request.
@@ -421,7 +453,7 @@ While workers have spare capacity, the merge barely touches response latency. Un
 - Use phpredis with a persistent connection (`'persistent' => true` on the connection in `config/database.php`). A new connection per request adds a handshake to every merge.
 - Keep Redis close to the application. A remote Redis adds a network round trip to every merge.
 - Ignore routes that probes and scrapers call often, with `metrics.ignore_routes`.
-- Turn off the instrumentation you do not read, such as `METRICS_CACHE=false`.
+- Turn off the instrumentation you do not read, such as `METRICS_CACHE=false`. Turn off `METRICS_ELOQUENT` in an application that loads tens of thousands of models per request.
 - Keep attribute values few, in your own metrics and in `Metrics::attributes()`. Each new series costs Redis calls on its first merge, and memory for as long as the store lives.
 - Use the `cache` store for development only. Its writers wait for each other.
 

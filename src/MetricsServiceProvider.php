@@ -20,7 +20,11 @@ use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\CachesRoutes;
 use Illuminate\Contracts\Routing\Registrar;
+use Illuminate\Database\Events\ModelsPruned;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Database\Events\TransactionBeginning;
+use Illuminate\Database\Events\TransactionCommitted;
+use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Foundation\Exceptions\Handler;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Queue\Events\JobExceptionOccurred;
@@ -36,8 +40,14 @@ use Nwidart\Metrics\Console\PushCommand;
 use Nwidart\Metrics\Http\PrometheusController;
 use Nwidart\Metrics\Instrumentation\CacheMetrics;
 use Nwidart\Metrics\Instrumentation\DatabaseClientMetrics;
+use Nwidart\Metrics\Instrumentation\DatabaseQueryCountMetrics;
+use Nwidart\Metrics\Instrumentation\DatabaseServerMetrics;
+use Nwidart\Metrics\Instrumentation\DatabaseTransactionMetrics;
+use Nwidart\Metrics\Instrumentation\EloquentMetrics;
 use Nwidart\Metrics\Instrumentation\ExceptionMetrics;
 use Nwidart\Metrics\Instrumentation\HttpServerMetrics;
+use Nwidart\Metrics\Instrumentation\IgnoredRoutes;
+use Nwidart\Metrics\Instrumentation\MigrationMetrics;
 use Nwidart\Metrics\Instrumentation\QueueMetrics;
 use Nwidart\Metrics\Instrumentation\RuntimeMetrics;
 use Nwidart\Metrics\Instrumentation\SchedulerMetrics;
@@ -70,6 +80,8 @@ final class MetricsServiceProvider extends ServiceProvider
     public const INSTRUMENTATION = [
         HttpServerMetrics::class,
         DatabaseClientMetrics::class,
+        DatabaseTransactionMetrics::class,
+        DatabaseQueryCountMetrics::class,
         QueueMetrics::class,
         CacheMetrics::class,
         SchedulerMetrics::class,
@@ -156,6 +168,8 @@ final class MetricsServiceProvider extends ServiceProvider
         foreach (self::INSTRUMENTATION as $listener) {
             $this->app->singleton($listener);
         }
+        $this->app->singleton(EloquentMetrics::class);
+        $this->app->singleton(IgnoredRoutes::class);
         $this->app->singleton(ExportTimeMetrics::class);
         $this->app->singleton(AttributeContributors::class);
         $this->app->singleton(Metrics::class);
@@ -191,6 +205,24 @@ final class MetricsServiceProvider extends ServiceProvider
         }
         if ($this->config()->get('metrics.instrumentation.db')) {
             $events->listen(QueryExecuted::class, [DatabaseClientMetrics::class, 'handle']);
+            $events->listen(TransactionBeginning::class, [DatabaseTransactionMetrics::class, 'began']);
+            $events->listen(TransactionCommitted::class, [DatabaseTransactionMetrics::class, 'committed']);
+            $events->listen(TransactionRolledBack::class, [DatabaseTransactionMetrics::class, 'rolledBack']);
+            $events->listen(QueryExecuted::class, [DatabaseQueryCountMetrics::class, 'query']);
+            $events->listen(RequestHandled::class, [DatabaseQueryCountMetrics::class, 'requestHandled']);
+            $events->listen(JobProcessing::class, [DatabaseQueryCountMetrics::class, 'jobProcessing']);
+            $events->listen([JobProcessed::class, JobExceptionOccurred::class, JobTimedOut::class], [DatabaseQueryCountMetrics::class, 'jobEnded']);
+        }
+        if ($this->config()->get('metrics.instrumentation.eloquent')) {
+            // A query dispatches one event per model it returns: resolve the listener once, not per event.
+            $eloquent = null;
+            $count = function (string $eventName) use (&$eloquent): void {
+                ($eloquent ??= $this->app->make(EloquentMetrics::class))->count($eventName);
+            };
+            foreach (EloquentMetrics::EVENTS as $event) {
+                $events->listen("eloquent.{$event}: *", $count);
+            }
+            $events->listen(ModelsPruned::class, [EloquentMetrics::class, 'pruned']);
         }
         if ($this->config()->get('metrics.instrumentation.queue')) {
             $events->listen(JobQueued::class, [QueueMetrics::class, 'queued']);
@@ -217,6 +249,13 @@ final class MetricsServiceProvider extends ServiceProvider
         }
         if ($this->config()->get('metrics.instrumentation.runtime')) {
             $this->app->make(ExportTimeMetrics::class)->register(fn (ApiMeterProvider $provider) => $this->app->make(RuntimeMetrics::class)($provider));
+        }
+        // Only when illuminate/database is there: these read the database on every export.
+        if ($this->config()->get('metrics.instrumentation.db_server') && $this->app->bound('db')) {
+            $this->app->make(ExportTimeMetrics::class)->register(fn (ApiMeterProvider $provider) => $this->app->make(DatabaseServerMetrics::class)($provider));
+        }
+        if ($this->config()->get('metrics.instrumentation.migrations') && $this->app->bound('migrator')) {
+            $this->app->make(ExportTimeMetrics::class)->register(fn (ApiMeterProvider $provider) => $this->app->make(MigrationMetrics::class)($provider));
         }
 
         // A queue worker runs many jobs in one process: merge after each one. Registered after the

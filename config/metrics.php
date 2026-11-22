@@ -89,8 +89,13 @@ return [
     'instrumentation' => [
         // http.server.request.duration
         'http' => env('METRICS_HTTP', true),
-        // db.client.operation.duration, for every successful query
+        // db.client.operation.duration, for every successful query;
+        // laravel.db.transaction.duration, per outer transaction; and
+        // laravel.db.queries, per HTTP request and per queued job
         'db' => env('METRICS_DB', true),
+        // laravel.eloquent.models (retrieved, created, updated, deleted,
+        // restored) and laravel.eloquent.models.pruned, per model class
+        'eloquent' => env('METRICS_ELOQUENT', true),
         // messaging.process.duration and messaging.client.sent.messages
         'queue' => env('METRICS_QUEUE', true),
         // laravel.cache.operations: reads (hit, miss), writes and deletes, per store
@@ -102,6 +107,11 @@ return [
         // Read on export only (scrape, metrics:push), never stored: laravel.info,
         // OPcache, PHP-FPM, load average and disk usage of the exporting server
         'runtime' => env('METRICS_RUNTIME', true),
+        // Read on export only, with a query each: laravel.db.server.connections
+        // and .max of the default connection's server (MySQL, MariaDB,
+        // PostgreSQL, SQL Server), and laravel.db.migrations.pending
+        'db_server' => env('METRICS_DB_SERVER', true),
+        'migrations' => env('METRICS_MIGRATIONS', true),
     ],
 
 ];

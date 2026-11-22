@@ -9,6 +9,7 @@ use Nwidart\MetricsStore\MetricStore;
 use OpenTelemetry\SDK\Metrics\Data\Histogram;
 use OpenTelemetry\SDK\Metrics\Data\HistogramDataPoint;
 use OpenTelemetry\SDK\Metrics\Data\Metric;
+use OpenTelemetry\SDK\Metrics\Data\Sum;
 use OpenTelemetry\SDK\Resource\ResourceInfoFactory;
 use Orchestra\Testbench\TestCase as Orchestra;
 use Predis\Client;
@@ -109,5 +110,28 @@ abstract class TestCase extends Orchestra
         }
 
         return [];
+    }
+
+    /**
+     * The points of a stored sum, each as its sorted attributes and its value.
+     *
+     * @return list<array{array<string, mixed>, int|float}>
+     */
+    protected function sums(string $name): array
+    {
+        $points = [];
+        foreach ($this->collect() as $metric) {
+            if ($metric->name === $name) {
+                self::assertInstanceOf(Sum::class, $metric->data);
+                foreach ($metric->data->dataPoints as $point) {
+                    $attributes = $point->attributes->toArray();
+                    ksort($attributes);
+                    $points[] = [$attributes, $point->value];
+                }
+            }
+        }
+        usort($points, fn (array $a, array $b): int => json_encode($a[0]) <=> json_encode($b[0]));
+
+        return $points;
     }
 }

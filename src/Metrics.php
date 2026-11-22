@@ -7,6 +7,7 @@ namespace Nwidart\Metrics;
 use Closure;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Foundation\Application;
+use Nwidart\Metrics\Instrumentation\EloquentMetrics;
 use Nwidart\Metrics\Testing\MetricsFake;
 use Nwidart\MetricsStore\MetricStore;
 use OpenTelemetry\API\Metrics\MeterInterface;
@@ -62,6 +63,11 @@ final class Metrics
      */
     public function flush(): void
     {
+        // Eloquent models are counted in memory, one event per model, and added here.
+        if ($this->app->resolved(EloquentMetrics::class)) {
+            $this->app->make(EloquentMetrics::class)->record();
+        }
+
         // Nothing was recorded if nothing built the provider.
         if (! $this->app->resolved(SdkMeterProvider::class)) {
             return;
