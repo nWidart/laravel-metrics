@@ -62,6 +62,20 @@ use Throwable;
 
 final class MetricsServiceProvider extends ServiceProvider
 {
+    /**
+     * The listeners of the built-in instrumentation. Each holds its instruments.
+     *
+     * @internal
+     */
+    public const INSTRUMENTATION = [
+        HttpServerMetrics::class,
+        DatabaseClientMetrics::class,
+        QueueMetrics::class,
+        CacheMetrics::class,
+        SchedulerMetrics::class,
+        ExceptionMetrics::class,
+    ];
+
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/metrics.php', 'metrics');
@@ -127,14 +141,12 @@ final class MetricsServiceProvider extends ServiceProvider
         });
 
         // Singletons: Laravel would otherwise build a listener, and its instrument, on every event.
-        $this->app->singleton(HttpServerMetrics::class);
-        $this->app->singleton(DatabaseClientMetrics::class);
-        $this->app->singleton(QueueMetrics::class);
-        $this->app->singleton(CacheMetrics::class);
-        $this->app->singleton(SchedulerMetrics::class);
-        $this->app->singleton(ExceptionMetrics::class);
+        foreach (self::INSTRUMENTATION as $listener) {
+            $this->app->singleton($listener);
+        }
         $this->app->singleton(ExportTimeMetrics::class);
         $this->app->singleton(AttributeContributors::class);
+        $this->app->singleton(Metrics::class);
     }
 
     public function boot(): void
@@ -242,19 +254,9 @@ final class MetricsServiceProvider extends ServiceProvider
             ->name('metrics.prometheus');
     }
 
-    /** Merges what was recorded since the last flush into the store. A failure never reaches the caller. */
     private function flush(): void
     {
-        // Nothing was recorded if nothing built the provider.
-        if (! $this->app->resolved(MeterProviderInterface::class)) {
-            return;
-        }
-
-        try {
-            $this->app->make(MeterProviderInterface::class)->forceFlush();
-        } catch (Throwable) {
-            // StoreExporter already logs store failures through the OpenTelemetry logger.
-        }
+        $this->app->make(Metrics::class)->flush();
     }
 
     private function redisStore(string $prefix, int $limit): RedisStore

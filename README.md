@@ -20,10 +20,12 @@ OpenTelemetry metrics for Laravel that work under PHP-FPM.
 Record your own metrics through the OpenTelemetry API:
 
 ```php
-use OpenTelemetry\API\Metrics\MeterProviderInterface;
+use Nwidart\Metrics\Facades\Metrics;
 
-app(MeterProviderInterface::class)->getMeter('app')->createCounter('orders.placed')->add(1);
+Metrics::meter('app')->createCounter('orders.placed', '{order}')->add(1, ['channel' => 'web']);
 ```
+
+`Metrics::meter()` returns an OpenTelemetry meter of the package's meter provider, which you can also resolve as `OpenTelemetry\API\Metrics\MeterProviderInterface`. The package flushes when a request or a command terminates and after each queued job. Call `Metrics::flush()` in other long-running work.
 
 By default the package's meter provider is also the OpenTelemetry global (`Globals::meterProvider()`), so libraries that use the OpenTelemetry API feed the store too.
 
@@ -60,9 +62,9 @@ Add attributes, such as a tenant or a module, from a service provider. The callb
 
 ```php
 use Illuminate\Foundation\Http\Events\RequestHandled;
-use Nwidart\Metrics\AttributeContributors;
+use Nwidart\Metrics\Facades\Metrics;
 
-app(AttributeContributors::class)->add('http.server.request.duration', fn (RequestHandled $event): array => [
+Metrics::attributes('http.server.request.duration', fn (RequestHandled $event): array => [
     'app.tenant' => $event->request->user()?->tenant->slug ?? 'none',
 ]);
 ```
@@ -100,11 +102,11 @@ The semantic conventions define no PHP runtime metrics, so the PHP ones use a `p
 Add your own with an observable instrument that is built at export time:
 
 ```php
-use Nwidart\Metrics\ExportTimeMetrics;
+use Nwidart\Metrics\Facades\Metrics;
 use OpenTelemetry\API\Metrics\MeterProviderInterface;
 use OpenTelemetry\API\Metrics\ObserverInterface;
 
-app(ExportTimeMetrics::class)->register(function (MeterProviderInterface $provider): void {
+Metrics::onExport(function (MeterProviderInterface $provider): void {
     $provider->getMeter('app')->createObservableGauge('queue.size', '{job}', null, [],
         fn (ObserverInterface $observer) => $observer->observe(Queue::size(), ['queue' => 'default']));
 });
@@ -147,6 +149,24 @@ With the `cache` store:
 - The driver must support locks. Every Laravel driver does, except `apc`.
 - `php artisan cache:clear` also removes the metrics. Prometheus reads this as a counter reset.
 - The store's own cache reads and writes are not counted in `laravel.cache.operations`. With the `database` cache driver, its queries are recorded in `db.client.operation.duration`.
+
+## Testing
+
+`Metrics::fake()` keeps what the application records in memory, with the rules of the real stores, so a test needs no Redis and sees only its own metrics:
+
+```php
+use Nwidart\Metrics\Facades\Metrics;
+
+$metrics = Metrics::fake();
+
+$this->post('/orders', $order);
+
+$metrics->assertValue('orders.placed', 1, ['channel' => 'web']);
+$metrics->assertRecorded('http.server.request.duration', ['http.route' => '/orders']);
+$metrics->assertNotRecorded('laravel.exceptions');
+```
+
+Attributes match every series that has at least those attributes. A value is the sum of the matching series: the value of a counter or a gauge, and the count of a histogram. `$metrics->value()` returns it, and `$metrics->metrics()` returns the OpenTelemetry data. `assertNothingRecorded()` checks that nothing was recorded at all.
 
 ## Production
 
