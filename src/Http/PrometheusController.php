@@ -6,23 +6,23 @@ namespace Nwidart\Metrics\Http;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Http\Response;
-use Nwidart\Metrics\ExportTimeMetrics;
-use Nwidart\MetricsStore\MetricStore;
+use Nwidart\Metrics\Metrics;
 use Nwidart\MetricsStore\Prometheus\PrometheusTextFormat;
 use OpenTelemetry\SDK\Resource\ResourceInfoFactory;
 use Throwable;
 
 /**
- * Serves the cumulative values of the store in the Prometheus text format. A store that cannot be
- * read answers 503, so that Prometheus marks the target down instead of reading an empty scrape.
+ * Serves Metrics::export() in the Prometheus text format: the store, the metrics read on export, and
+ * nothing while metrics are disabled. A store that cannot be built or read answers 503, so that
+ * Prometheus marks the target down instead of reading an empty scrape. Other packages, such as
+ * laravel-actuator, serve it under their own route.
  */
 final class PrometheusController
 {
-    public function __invoke(MetricStore $store, ExportTimeMetrics $exportTime, PrometheusTextFormat $format, Repository $config): Response
+    public function __invoke(Metrics $metrics, PrometheusTextFormat $format, Repository $config): Response
     {
         try {
-            $metrics = $store->collect(ResourceInfoFactory::emptyResource());
-            $observed = $exportTime->collect(ResourceInfoFactory::emptyResource());
+            $exported = $metrics->export(ResourceInfoFactory::emptyResource());
         } catch (Throwable $e) {
             report($e);
 
@@ -37,6 +37,6 @@ final class PrometheusController
             }
         }
 
-        return new Response($format->render([...$metrics, ...$observed], $labels), 200, ['Content-Type' => PrometheusTextFormat::CONTENT_TYPE]);
+        return new Response($format->render($exported, $labels), 200, ['Content-Type' => PrometheusTextFormat::CONTENT_TYPE]);
     }
 }

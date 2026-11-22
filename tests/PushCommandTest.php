@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nwidart\Metrics\Tests;
 
 use InvalidArgumentException;
+use Nwidart\Metrics\Facades\Metrics;
 use OpenTelemetry\API\Metrics\MeterProviderInterface;
 use OpenTelemetry\Contrib\Otlp\MetricExporter;
 use OpenTelemetry\SDK\Metrics\Data\Metric;
@@ -51,6 +52,25 @@ final class PushCommandTest extends TestCase
         $exporter = new InMemoryExporter;
         $this->app->instance(MetricExporterInterface::class, $exporter);
 
+        $this->artisan('metrics:push')->expectsOutputToContain('The store holds no metrics.')->assertSuccessful();
+        $this->assertSame([], $exporter->collect());
+    }
+
+    #[Test]
+    public function excluded_metrics_and_disabled_metrics_are_not_pushed(): void
+    {
+        $exporter = new InMemoryExporter;
+        $this->app->instance(MetricExporterInterface::class, $exporter);
+        $meter = $this->app->make(MeterProviderInterface::class)->getMeter('app');
+        $meter->createCounter('orders')->add(1);
+        $meter->createCounter('refunds')->add(1);
+        $this->app->terminate();
+        Metrics::exclude(fn (Metric $metric): bool => $metric->name === 'refunds');
+
+        $this->artisan('metrics:push')->assertSuccessful();
+        $this->assertSame(['orders'], array_map(fn (Metric $metric) => $metric->name, $exporter->collect(true)));
+
+        $this->app['config']->set('metrics.enabled', false);
         $this->artisan('metrics:push')->expectsOutputToContain('The store holds no metrics.')->assertSuccessful();
         $this->assertSame([], $exporter->collect());
     }

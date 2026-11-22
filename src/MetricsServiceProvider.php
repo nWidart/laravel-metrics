@@ -101,10 +101,22 @@ final class MetricsServiceProvider extends ServiceProvider
                 return new NoopMeterProvider;
             }
 
+            // A store that cannot be built, such as an unknown driver, must not fail the request
+            // either: report it, and record nothing in this process. An export answers with the error.
+            try {
+                $store = $this->app->make(MetricStore::class);
+            } catch (Throwable $e) {
+                // Bound first: reporting records laravel.exceptions, which asks for this provider.
+                $this->app->instance(MeterProviderInterface::class, $noop = new NoopMeterProvider);
+                report($e);
+
+                return $noop;
+            }
+
             return (new MeterProviderBuilder)
                 // The store keeps no resource, and the resource detectors cost time on every request.
                 ->setResource(ResourceInfoFactory::emptyResource())
-                ->addReader(new ExportingReader(new StoreExporter($this->app->make(MetricStore::class))))
+                ->addReader(new ExportingReader(new StoreExporter($store)))
                 ->build();
         });
         $this->app->alias(MeterProviderInterface::class, ApiMeterProvider::class);

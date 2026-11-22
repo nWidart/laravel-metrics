@@ -6,8 +6,7 @@ namespace Nwidart\Metrics\Console;
 
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
-use Nwidart\Metrics\ExportTimeMetrics;
-use Nwidart\MetricsStore\MetricStore;
+use Nwidart\Metrics\Metrics;
 use OpenTelemetry\SDK\Common\Attribute\Attributes;
 use OpenTelemetry\SDK\Metrics\MetricExporterInterface;
 use OpenTelemetry\SDK\Resource\ResourceInfo;
@@ -24,11 +23,10 @@ final class PushCommand extends Command
 
     protected $description = 'Send the stored metrics to the OTLP endpoint';
 
-    public function handle(MetricStore $store, ExportTimeMetrics $exportTime, Repository $config): int
+    public function handle(Metrics $metrics, Repository $config): int
     {
         try {
-            $resource = $this->resource($config);
-            $metrics = [...$store->collect($resource), ...$exportTime->collect($resource)];
+            $exported = $metrics->export($this->resource($config));
         } catch (Throwable $e) {
             report($e);
             $this->components->error('The metrics store cannot be read: '.$e->getMessage());
@@ -36,7 +34,7 @@ final class PushCommand extends Command
             return self::FAILURE;
         }
 
-        if ($metrics === []) {
+        if ($exported === []) {
             $this->components->info('The store holds no metrics.');
 
             return self::SUCCESS;
@@ -45,7 +43,7 @@ final class PushCommand extends Command
         // A configuration error, such as a missing endpoint, is thrown as it is.
         $exporter = $this->laravel->make(MetricExporterInterface::class);
         try {
-            $sent = $exporter->export($metrics);
+            $sent = $exporter->export($exported);
             $exporter->shutdown();
         } catch (Throwable $e) {
             report($e);
@@ -58,7 +56,7 @@ final class PushCommand extends Command
             return self::FAILURE;
         }
 
-        $this->components->info(sprintf('Sent %d metrics.', count($metrics)));
+        $this->components->info(sprintf('Sent %d metrics.', count($exported)));
 
         return self::SUCCESS;
     }
