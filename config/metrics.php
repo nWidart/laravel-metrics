@@ -74,6 +74,15 @@ return [
     ],
 
     /*
+    | Requests to these routes are not recorded in http.server.request.duration,
+    | so that probes and scrapes do not drown the application's own traffic.
+    | A pattern that starts with "/" matches the URI template, such as "/up";
+    | any other pattern matches the route name, such as "horizon.*".
+    | "*" is a wildcard.
+    */
+    'ignore_routes' => [],
+
+    /*
     | Built-in instrumentation, following the OpenTelemetry semantic
     | conventions where they define the metric.
     */

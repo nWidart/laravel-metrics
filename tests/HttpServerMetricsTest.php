@@ -18,6 +18,8 @@ final class HttpServerMetricsTest extends TestCase
         $router->get('/users/{user}', fn (string $user) => "user {$user}");
         $router->get('/', fn () => 'home');
         $router->get('/boom', fn () => throw new RuntimeException('boom'));
+        $router->get('/up', fn () => 'up');
+        $router->get('/probe/live', fn () => 'live')->name('probe.live');
     }
 
     #[Test]
@@ -74,6 +76,23 @@ final class HttpServerMetricsTest extends TestCase
         $points = $this->histogramPoints('http.server.request.duration');
         $this->assertCount(1, $points);
         $this->assertSame('_OTHER', $points[0]->attributes->get('http.request.method'));
+    }
+
+    #[Test]
+    #[DefineEnvironment('ignoreProbes')]
+    public function ignored_routes_are_not_recorded_by_name_or_by_uri(): void
+    {
+        $this->get('/up')->assertOk();
+        $this->get('/probe/live')->assertOk();
+        $this->get('/')->assertOk();
+
+        $routes = array_map(fn ($point) => $point->attributes->get('http.route'), $this->histogramPoints('http.server.request.duration'));
+        $this->assertSame(['/'], $routes);
+    }
+
+    protected function ignoreProbes(Application $app): void
+    {
+        $app['config']->set('metrics.ignore_routes', ['/up', 'probe.*']);
     }
 
     #[Test]

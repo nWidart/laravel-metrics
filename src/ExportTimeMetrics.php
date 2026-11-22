@@ -58,9 +58,10 @@ final class ExportTimeMetrics
             }
         }
 
-        $reader->collect();
-        $metrics = array_values($exporter->collect(true));
+        // Shutting the provider down collects once; a collect() before it would run every
+        // observable callback twice.
         $provider->shutdown();
+        $metrics = array_values($exporter->collect(true));
 
         return $metrics;
     }

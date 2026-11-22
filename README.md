@@ -52,6 +52,8 @@ By default the package's meter provider is also the OpenTelemetry global (`Globa
 | `laravel.exceptions` (counter) | `exception.type` |
 | `laravel.cache.operations` (counter) | `laravel.cache.store`, `laravel.cache.operation` (`read`, `write`, `delete`), `laravel.cache.result` (`hit`, `miss`, `success`, `failure`) |
 
+Requests to the routes in `metrics.ignore_routes` are not recorded, so that health probes and scrapes do not drown the application's own traffic. A pattern that starts with `/` matches the URI template (`/up`); any other pattern matches the route name (`horizon.*`).
+
 The database listener costs about 2 µs per query. Laravel dispatches no event for a failed query, so failed queries are not recorded.
 
 `messaging.process.duration` has one value per attempt. An attempt that throws has the exception class as `error.type`; a job that fails itself, or has no attempts left, has `error.type` = `failed`; an attempt that the worker stops at its timeout has `error.type` = `Illuminate\Queue\TimeoutExceededException`, and is merged before the worker exits. `laravel.job.name` is the job class, which the conventions do not define. A queue worker merges after each job; a sync job merges with the request or command that dispatched it.

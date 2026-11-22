@@ -47,8 +47,10 @@ final class RuntimeMetricsTest extends TestCase
             throw new RuntimeException('broken callback');
         });
         $exportTime->register(function (MeterProviderInterface $provider) use (&$calls): void {
-            $calls++;
-            $provider->getMeter('app')->createObservableGauge('queue.size', '{job}', null, [], fn (ObserverInterface $observer) => $observer->observe(4, ['queue' => 'default']));
+            $provider->getMeter('app')->createObservableGauge('queue.size', '{job}', null, [], function (ObserverInterface $observer) use (&$calls): void {
+                $calls++;
+                $observer->observe(4, ['queue' => 'default']);
+            });
         });
 
         $this->get('/');

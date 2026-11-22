@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Nwidart\Metrics\Instrumentation;
 
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Routing\Route;
+use Illuminate\Support\Str;
 use Nwidart\Metrics\AttributeContributors;
 use OpenTelemetry\API\Metrics\HistogramInterface;
 use OpenTelemetry\API\Metrics\MeterProviderInterface;
@@ -13,7 +15,8 @@ use OpenTelemetry\API\Metrics\MeterProviderInterface;
 /**
  * Records http.server.request.duration, as the OpenTelemetry semantic conventions define it.
  * The duration runs from REQUEST_TIME_FLOAT, which PHP-FPM, Octane and Symfony test requests
- * all set when the request arrives, to the moment the response is ready to send.
+ * all set when the request arrives, to the moment the response is ready to send. Routes that match
+ * metrics.ignore_routes, such as health probes, are not recorded.
  */
 final class HttpServerMetrics
 {
@@ -25,8 +28,14 @@ final class HttpServerMetrics
 
     private readonly HistogramInterface $duration;
 
-    public function __construct(MeterProviderInterface $meterProvider, private readonly AttributeContributors $contributors)
+    /** @var list<string> */
+    private readonly array $ignoredRoutes;
+
+    public function __construct(MeterProviderInterface $meterProvider, private readonly AttributeContributors $contributors, Repository $config)
     {
+        $ignored = $config->get('metrics.ignore_routes');
+        $this->ignoredRoutes = array_values(array_filter(is_array($ignored) ? $ignored : [], is_string(...)));
+
         $this->duration = $meterProvider->getMeter('nwidart/laravel-metrics')->createHistogram(
             'http.server.request.duration',
             's',
@@ -49,6 +58,9 @@ final class HttpServerMetrics
         $route = $request->route();
         if ($route instanceof Route) {
             $attributes['http.route'] = '/'.ltrim($route->uri(), '/');
+            if ($this->ignoredRoutes !== [] && $this->ignored($route, $attributes['http.route'])) {
+                return;
+            }
         }
         $protocol = $request->server('SERVER_PROTOCOL');
         if (is_string($protocol) && str_starts_with($protocol, 'HTTP/')) {
@@ -62,5 +74,18 @@ final class HttpServerMetrics
         $elapsed = is_numeric($startedAt) ? microtime(true) - (float) $startedAt : 0.0;
 
         $this->duration->record(max(0.0, $elapsed), [...$attributes, ...$this->contributors->for('http.server.request.duration', $event)]);
+    }
+
+    /** A pattern that starts with "/" matches the URI template, any other the route name. */
+    private function ignored(Route $route, string $uri): bool
+    {
+        $name = (string) $route->getName();
+        foreach ($this->ignoredRoutes as $pattern) {
+            if (str_starts_with($pattern, '/') ? Str::is($pattern, $uri) : ($name !== '' && Str::is($pattern, $name))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

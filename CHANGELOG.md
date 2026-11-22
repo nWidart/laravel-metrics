@@ -13,6 +13,7 @@ First release.
   - `laravel.scheduler.task.duration`;
   - `laravel.exceptions`.
 - Metrics read on export: `laravel.info`, OPcache, PHP-FPM, load average and disk usage.
+- `metrics.ignore_routes`: routes, by name or URI template, that `http.server.request.duration` leaves out, such as health probes.
 - `GET /metrics` in the Prometheus text format, off by default.
 - `php artisan metrics:push` to an OTLP/HTTP endpoint.
 - Stores:
