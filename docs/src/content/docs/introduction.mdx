@@ -1,0 +1,85 @@
+---
+title: Introduction
+description: What Laravel Metrics is, what it records, where the metrics go, and how this documentation is organised.
+---
+
+import { LinkCard, CardGrid } from '@astrojs/starlight/components';
+
+Laravel Metrics records OpenTelemetry metrics in a Laravel application, and it works under PHP-FPM. Install it, and it answers the questions that you ask about a running application:
+
+- **How many requests does it serve, and how fast?** Per route, method and status code.
+- **How much time goes to the database?** Per connection and operation.
+- **Do the queue jobs keep up?** Jobs sent and processed, with their duration and their failures.
+- **Does the cache help?** Hits, misses, writes and deletes, per store.
+- **Do the scheduled tasks run, and do they fail?**
+- **Which exceptions does it report, and how often?**
+- **How does the server look?** OPcache, PHP-FPM workers, load average and disk space.
+
+You write no code for these. You can add metrics of your own through the OpenTelemetry API.
+
+## Why a package for this
+
+The OpenTelemetry SDK keeps metrics in the memory of one process. Under PHP-FPM, every request starts with an empty process, so a counter starts at zero on each request. Laravel Metrics adds the missing part: each request merges what it recorded into a shared store, Redis in production, after the response is sent. The store holds the totals of every worker and every host. [How it works](/laravel-metrics/explanation/how-it-works/) tells the full story.
+
+## What it records
+
+| Metric | Records | Reference |
+|---|---|---|
+| `http.server.request.duration` | Each HTTP request | [HTTP requests](/laravel-metrics/reference/metrics/http/) |
+| `db.client.operation.duration` | Each successful query | [Database queries](/laravel-metrics/reference/metrics/database/) |
+| `messaging.process.duration`, `messaging.client.sent.messages` | Each job attempt, each job sent | [Queue jobs](/laravel-metrics/reference/metrics/queue/) |
+| `laravel.cache.operations` | Each cache read, write and delete | [Cache operations](/laravel-metrics/reference/metrics/cache/) |
+| `laravel.scheduler.task.duration` | Each run of a scheduled task | [Scheduled tasks](/laravel-metrics/reference/metrics/scheduler/) |
+| `laravel.exceptions` | Each reported exception | [Exceptions](/laravel-metrics/reference/metrics/exceptions/) |
+| `laravel.info`, `php.opcache.*`, `php.fpm.*`, `system.*` | Read when the metrics are exported | [Metrics read on export](/laravel-metrics/reference/metrics/export-time/) |
+
+The names follow the [OpenTelemetry semantic conventions](/laravel-metrics/explanation/naming/) where they define the metric. Each group has its own switch.
+
+## Where the metrics go
+
+The package records from the first request. To send the metrics out, pick one way, or both:
+
+- **Prometheus scrapes them.** Turn on `GET /metrics`, which serves the Prometheus text format. See [Scrape with Prometheus](/laravel-metrics/guides/scrape-with-prometheus/).
+- **The application pushes them over OTLP**, to an OpenTelemetry Collector or a backend that accepts OTLP. Schedule `php artisan metrics:push`. See [Push over OTLP](/laravel-metrics/guides/push-over-otlp/).
+
+[Scrape or push](/laravel-metrics/explanation/scrape-or-push/) compares the two.
+
+## What it does not do
+
+- It records metrics only: no traces and no logs.
+- It is not tested with Laravel Octane or Redis Cluster. See [Limits](/laravel-metrics/reference/limits/).
+
+## Requirements
+
+- PHP 8.2 or later
+- Laravel 12 or 13
+- Redis in production, with phpredis or predis. Development can run without it.
+
+[Installation](/laravel-metrics/installation/) has the details.
+
+## How this documentation is organised
+
+The documentation has four parts. Each part serves a different need.
+
+<CardGrid>
+	<LinkCard
+		title="Tutorial"
+		description="Learning. Start here if you are new: one guided lesson from a fresh application to a metric of your own and its test."
+		href="/laravel-metrics/tutorials/first-metrics/"
+	/>
+	<LinkCard
+		title="How-to guides"
+		description="Working. Short recipes for one goal each, such as setting up production or pushing over OTLP."
+		href="/laravel-metrics/guides/install-in-production/"
+	/>
+	<LinkCard
+		title="Reference"
+		description="Looking up. Every configuration key, facade method, command, store and built-in metric."
+		href="/laravel-metrics/reference/configuration/"
+	/>
+	<LinkCard
+		title="Explanation"
+		description="Understanding. Why the package merges into a store, what it costs, and how it names and bounds metrics."
+		href="/laravel-metrics/explanation/how-it-works/"
+	/>
+</CardGrid>

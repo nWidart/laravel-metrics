@@ -11,6 +11,8 @@ The pages follow [Diátaxis](https://diataxis.fr/). Each page has one type, and 
 | `reference/` | Reference | A user who looks up a fact |
 | `explanation/` | Explanation | A reader who wants to understand why |
 
+`introduction.mdx` and `installation.mdx` sit at the root, in the sidebar's "Start here" group, next to the tutorial.
+
 Add a page to the sidebar in `astro.config.mjs`. Link to other pages with absolute paths that include the base and a trailing slash, such as `/laravel-metrics/reference/configuration/`.
 
 ## Develop

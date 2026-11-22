@@ -1,0 +1,93 @@
+---
+title: Installation
+description: Install Laravel Metrics with Composer, pick a store, and pick how the metrics leave the application.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+## Requirements
+
+- PHP 8.2 or later
+- Laravel 12 or 13
+- For the `redis` store, the default: a Redis server, with the `phpredis` extension or the `predis/predis` package
+- For `metrics:push`: a PSR-18 HTTP client. Laravel already requires Guzzle, which is one.
+
+The package does not need the `opentelemetry` PHP extension. [Requirements](/laravel-metrics/reference/requirements/) lists the dependencies and the tested versions.
+
+## Install the package
+
+<Steps>
+
+1. Require the package with Composer:
+
+   ```bash
+   composer require nwidart/laravel-metrics
+   ```
+
+   Composer can ask if you trust the `tbachert/spi` plugin. The package does not need it: answer `n`.
+
+   Package discovery registers `Nwidart\Metrics\MetricsServiceProvider`. You do not need to add it to `bootstrap/providers.php`.
+
+2. Pick a store. The package records from the first request, into the Redis `default` connection.
+
+   - In production, keep the `redis` store. Give it a Redis connection that never evicts keys: see [Set up for production](/laravel-metrics/guides/install-in-production/).
+   - Without Redis, such as on a development machine, use a Laravel cache store:
+
+     ```bash title=".env"
+     METRICS_STORE=cache
+     ```
+
+     See [Develop without Redis](/laravel-metrics/guides/develop-without-redis/).
+
+   Without a reachable Redis and without `METRICS_STORE=cache`, the application keeps working, but each request that records writes a warning to the PHP error log. To record nothing, set `METRICS_ENABLED=false`.
+
+3. Pick how the metrics leave the application:
+
+   - For a Prometheus scrape, set `METRICS_PROMETHEUS=true` and protect `GET /metrics`. See [Scrape with Prometheus](/laravel-metrics/guides/scrape-with-prometheus/).
+   - For an OTLP push, set `OTEL_EXPORTER_OTLP_ENDPOINT` and schedule `metrics:push`. See [Push over OTLP](/laravel-metrics/guides/push-over-otlp/).
+
+4. Optional: publish the configuration file to change the defaults:
+
+   ```bash
+   php artisan vendor:publish --tag=metrics-config
+   ```
+
+   This copies the file to `config/metrics.php`. The [configuration reference](/laravel-metrics/reference/configuration/) describes every key.
+
+</Steps>
+
+:::note[Package discovery turned off?]
+If your application sets `dont-discover` for this package, register the provider yourself in `bootstrap/providers.php`:
+
+```php title="bootstrap/providers.php"
+return [
+    App\Providers\AppServiceProvider::class,
+    Nwidart\Metrics\MetricsServiceProvider::class,
+];
+```
+:::
+
+## Deploy with an optimized autoloader
+
+In production, install with an optimized autoloader. Without it, booting the OpenTelemetry SDK costs about 1 ms per request instead of about 75 µs:
+
+```bash
+composer install --optimize-autoloader --no-dev
+```
+
+## Route and configuration caching
+
+The package reads every value through `config/metrics.php`, so it works with `php artisan config:cache`. A cached configuration does not read `.env`, so run `php artisan config:cache` again after you change a `METRICS_*` variable.
+
+With cached routes, the package does not register the scrape route itself. After you change `METRICS_PROMETHEUS` or `METRICS_PROMETHEUS_PATH`, rebuild both caches:
+
+```bash
+php artisan config:cache
+php artisan route:cache
+```
+
+## Next steps
+
+- New to the package? Follow the [tutorial](/laravel-metrics/tutorials/first-metrics/).
+- Going to production? Follow [Set up for production](/laravel-metrics/guides/install-in-production/).
+- Want metrics of your own? See [Record your own metrics](/laravel-metrics/guides/record-custom-metrics/).
