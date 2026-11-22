@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nwidart\Metrics\Instrumentation;
 
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Migrations\Migrator;
 use OpenTelemetry\API\Metrics\MeterProviderInterface;
 use OpenTelemetry\API\Metrics\ObserverInterface;
@@ -30,17 +31,14 @@ final class MigrationMetrics
             $files = $migrator->getMigrationFiles([...$migrator->paths(), $this->app->databasePath('migrations')]);
             // Without the migrations table, nothing has run.
             $ran = $migrator->repositoryExists() ? $migrator->getRepository()->getRan() : [];
-            // What migrate runs: Laravel's own filter leaves out the migrations that have run and
-            // those of withoutMigrations(). shouldSkip() reads shouldRun(), since Laravel 12.x.
-            /** @var list<string> $paths */
-            $paths = (fn (): array => $this->pendingMigrations($files, $ran))->call($migrator);
-            $pending = 0;
-            foreach ($paths as $path) {
-                // @phpstan-ignore function.alreadyNarrowedType (Laravel 12.0 has no shouldSkip())
-                if (! method_exists($migrator, 'shouldSkip') || ! $migrator->shouldSkip($path)) {
-                    $pending++;
-                }
-            }
+            // What migrate runs, with Laravel's own filter: without the migrations that have run,
+            // those of withoutMigrations(), and those whose shouldRun() returns false (Laravel 12.x).
+            $pending = (fn (): int => count(array_filter(
+                $this->pendingMigrations($files, $ran),
+                fn (string $path): bool => ! (($migration = $this->resolvePath($path)) instanceof Migration
+                    // @phpstan-ignore function.alreadyNarrowedType (Laravel 12.0 has no shouldRun())
+                    && method_exists($migration, 'shouldRun') && ! $migration->shouldRun()),
+            )))->call($migrator);
         } catch (Throwable) {
             return;
         }
