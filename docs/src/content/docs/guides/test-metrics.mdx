@@ -1,0 +1,198 @@
+---
+title: Test your metrics
+description: Assert in Pest or PHPUnit that your code records the metrics you expect, without Redis.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+To check what a test records, call `Metrics::fake()` before the code under test. The fake keeps the metrics in memory, with the rules of the real stores. The test needs no Redis and sees only its own metrics.
+
+## 1. Keep the test suite off Redis
+
+Tests that do not call the fake still record into the configured store. To keep them in memory, use the `cache` store with the `array` cache driver:
+
+```xml title="phpunit.xml"
+<php>
+    <env name="CACHE_STORE" value="array"/>
+    <env name="METRICS_STORE" value="cache"/>
+</php>
+```
+
+Laravel's `phpunit.xml` already sets `CACHE_STORE=array`.
+
+Do not set `METRICS_ENABLED=false` in tests that call the fake. With metrics off, nothing is recorded, and every assertion that expects a metric fails.
+
+## 2. Assert your own metric
+
+<Tabs syncKey="test-runner">
+<TabItem label="Pest">
+
+```php title="tests/Feature/PlaceOrderTest.php"
+use Nwidart\Metrics\Facades\Metrics;
+
+it('counts the order', function () {
+    $metrics = Metrics::fake();
+
+    $this->post('/orders', ['sku' => 'TSHIRT'])->assertCreated();
+
+    $metrics->assertValue('app.orders.placed', 1, ['app.order.channel' => 'web']);
+});
+```
+
+</TabItem>
+<TabItem label="PHPUnit">
+
+```php title="tests/Feature/PlaceOrderTest.php"
+use Nwidart\Metrics\Facades\Metrics;
+use Tests\TestCase;
+
+final class PlaceOrderTest extends TestCase
+{
+    public function test_it_counts_the_order(): void
+    {
+        $metrics = Metrics::fake();
+
+        $this->post('/orders', ['sku' => 'TSHIRT'])->assertCreated();
+
+        $metrics->assertValue('app.orders.placed', 1, ['app.order.channel' => 'web']);
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+The attributes you pass match every series that has **at least** those attributes. `assertValue()` adds up the matching series.
+
+## 3. Assert a built-in metric
+
+The built-in instrumentation records in tests too:
+
+<Tabs syncKey="test-runner">
+<TabItem label="Pest">
+
+```php
+it('records the request and its queries', function () {
+    $metrics = Metrics::fake();
+
+    $this->get('/orders')->assertOk();
+
+    $metrics->assertRecorded('http.server.request.duration', [
+        'http.route' => '/orders',
+        'http.response.status_code' => 200,
+    ]);
+    $metrics->assertRecorded('db.client.operation.duration', ['db.operation.name' => 'SELECT']);
+    $metrics->assertNotRecorded('laravel.exceptions');
+});
+```
+
+</TabItem>
+<TabItem label="PHPUnit">
+
+```php
+public function test_it_records_the_request_and_its_queries(): void
+{
+    $metrics = Metrics::fake();
+
+    $this->get('/orders')->assertOk();
+
+    $metrics->assertRecorded('http.server.request.duration', [
+        'http.route' => '/orders',
+        'http.response.status_code' => 200,
+    ]);
+    $metrics->assertRecorded('db.client.operation.duration', ['db.operation.name' => 'SELECT']);
+    $metrics->assertNotRecorded('laravel.exceptions');
+}
+```
+
+</TabItem>
+</Tabs>
+
+## Count histogram values
+
+For a histogram, the value is the number of recorded values, not their sum. Two requests to `/orders` give a value of 2:
+
+```php
+$metrics = Metrics::fake();
+
+$this->get('/orders');
+$this->get('/orders');
+
+$metrics->assertValue('http.server.request.duration', 2, ['http.route' => '/orders']);
+```
+
+For a counter or an up-down counter, the value is the total. For a gauge, it is the last value.
+
+## Assert a queued job
+
+With `QUEUE_CONNECTION=sync`, a dispatched job runs at once and records `messaging.process.duration`:
+
+```php
+use App\Jobs\ShipOrder;
+
+$metrics = Metrics::fake();
+
+ShipOrder::dispatch($order);
+
+$metrics->assertRecorded('messaging.process.duration', ['laravel.job.name' => ShipOrder::class]);
+```
+
+A job that throws has the exception class as `error.type`.
+
+## Assert an exception count
+
+```php
+use App\Exceptions\PaymentFailed;
+
+$metrics = Metrics::fake();
+
+report(new PaymentFailed('Card declined'));
+
+$metrics->assertValue('laravel.exceptions', 1, ['exception.type' => PaymentFailed::class]);
+```
+
+`laravel.exceptions` counts through the application's exception handler. `Exceptions::fake()` replaces that handler, so do not combine it with this assertion.
+
+## Read the raw values
+
+To check something the assertions do not cover, read the values:
+
+```php
+$metrics->value('http.server.request.duration', ['http.route' => '/orders']); // int|float|null
+$metrics->metrics(); // list<OpenTelemetry\SDK\Metrics\Data\Metric>
+```
+
+`value()` returns `null` when no series matches.
+
+## Check that nothing was recorded
+
+```php
+$metrics = Metrics::fake();
+
+$this->artisan('inspire');
+
+$metrics->assertNothingRecorded();
+```
+
+## Test metrics read on export
+
+The fake asserts what the application records. Metrics from `Metrics::onExport()` are read only on export. To test them, export and look for the metric:
+
+```php
+use OpenTelemetry\SDK\Resource\ResourceInfoFactory;
+
+Metrics::fake();
+
+$names = array_map(
+    fn ($metric) => $metric->name,
+    Metrics::export(ResourceInfoFactory::emptyResource()),
+);
+
+expect($names)->toContain('app.queue.size');
+```
+
+## Related
+
+- [MetricsFake reference](/laravel-metrics/reference/testing/)
+- [Metrics facade reference](/laravel-metrics/reference/facade/)
+- [Record your own metrics](/laravel-metrics/guides/record-custom-metrics/)

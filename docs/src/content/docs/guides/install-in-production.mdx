@@ -1,0 +1,133 @@
+---
+title: Set up for production
+description: Install the package on production servers, with a Redis store that keeps every series and a deployment that boots the SDK fast.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+This guide sets up the `redis` store for production. It assumes the application already runs Redis through `config/database.php`.
+
+## 1. Install the package
+
+```bash
+composer require nwidart/laravel-metrics
+```
+
+The service provider registers itself. Recording starts at once, into the Redis `default` connection.
+
+## 2. Give the store its own Redis connection
+
+The store needs a Redis that never evicts keys. A cache Redis with an eviction policy loses series without a warning.
+
+1. Add a connection to the `redis` array in `config/database.php`:
+
+   ```php title="config/database.php"
+   'redis' => [
+       // ...
+
+       'metrics' => [
+           'url' => env('REDIS_METRICS_URL'),
+           'host' => env('REDIS_METRICS_HOST', '127.0.0.1'),
+           'username' => env('REDIS_METRICS_USERNAME'),
+           'password' => env('REDIS_METRICS_PASSWORD'),
+           'port' => env('REDIS_METRICS_PORT', '6379'),
+           'database' => env('REDIS_METRICS_DB', '0'),
+           'persistent' => true,
+       ],
+   ],
+   ```
+
+2. Point the store at it in `.env`:
+
+   ```bash title=".env"
+   METRICS_REDIS_CONNECTION=metrics
+   ```
+
+3. Set the eviction policy of that Redis to `noeviction`. In `redis.conf`:
+
+   ```text title="redis.conf"
+   maxmemory-policy noeviction
+   ```
+
+   On a managed Redis, such as Amazon ElastiCache, set `maxmemory-policy` in the parameter group.
+
+`'persistent' => true` keeps the connection open between requests, so a merge does not pay a handshake.
+
+## 3. Pick the Redis client
+
+The store works with phpredis and with predis. Laravel picks the client with `REDIS_CLIENT`.
+
+<Tabs>
+<TabItem label="phpredis">
+
+Install the `redis` PHP extension, then:
+
+```bash title=".env"
+REDIS_CLIENT=phpredis
+```
+
+</TabItem>
+<TabItem label="predis">
+
+```bash
+composer require predis/predis
+```
+
+```bash title=".env"
+REDIS_CLIENT=predis
+```
+
+</TabItem>
+</Tabs>
+
+A phpredis cluster connection is not supported: the merge fails and logs a warning. Use one Redis instance.
+
+## 4. Deploy with an optimized autoloader
+
+Without an optimized autoloader, booting the SDK costs about 1 ms per request instead of about 75 µs. In the deployment script:
+
+```bash
+composer install --optimize-autoloader --no-dev
+php artisan config:cache
+php artisan route:cache
+```
+
+The package reads every value through `config/metrics.php`, so it works with a cached configuration. Run `php artisan config:cache` again after you change a `METRICS_*` variable.
+
+## 5. Restart the queue workers
+
+Queue workers keep the configuration they booted with. After each deployment:
+
+```bash
+php artisan queue:restart
+```
+
+With Horizon, run `php artisan horizon:terminate` instead. Each worker merges after each job.
+
+## 6. Leave out health probes
+
+Load balancers and orchestrators call a health route many times a minute. Leave it out of `http.server.request.duration`. Publish the configuration, then set `ignore_routes`:
+
+```bash
+php artisan vendor:publish --tag=metrics-config
+```
+
+```php title="config/metrics.php"
+'ignore_routes' => ['/up'],
+```
+
+See [Ignore routes](/laravel-metrics/guides/ignore-routes/) for other patterns.
+
+## 7. Send the metrics out
+
+The package records, but nothing leaves the application yet. Do one of these:
+
+- To let Prometheus scrape the application, follow [Scrape with Prometheus](/laravel-metrics/guides/scrape-with-prometheus/).
+- To push over OTLP to a Collector or a backend, follow [Push over OTLP](/laravel-metrics/guides/push-over-otlp/).
+
+## Related
+
+- [Configuration reference](/laravel-metrics/reference/configuration/)
+- [Stores reference](/laravel-metrics/reference/stores/)
+- [Requirements](/laravel-metrics/reference/requirements/)
+- [About the stores](/laravel-metrics/explanation/stores/)

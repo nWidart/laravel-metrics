@@ -1,0 +1,254 @@
+---
+title: Record your first metrics
+description: Install Laravel Metrics in a new Laravel application, read its metrics in the Prometheus format, record a metric of your own and test it.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+In this tutorial, we build a small shop application that records metrics. We install the package, read the metrics that it records by itself, add a counter of our own and write a test for it.
+
+We need no Redis. We keep the metrics in a file, on our own computer.
+
+You need PHP 8.2 or later, Composer and `curl`.
+
+## Create the application
+
+<Steps>
+
+1. Create a new Laravel application named `shop`, and go into its folder:
+
+   ```bash
+   composer create-project laravel/laravel shop
+   cd shop
+   ```
+
+   Composer installs Laravel and runs the first migrations. The last lines show:
+
+   ```text
+   INFO  Running migrations.
+
+   0001_01_01_000000_create_users_table ........ 5.52ms DONE
+   0001_01_01_000001_create_cache_table ........ 3.57ms DONE
+   0001_01_01_000002_create_jobs_table ......... 6.91ms DONE
+   ```
+
+</Steps>
+
+## Install the package
+
+<Steps>
+
+1. Require the package:
+
+   ```bash
+   composer require nwidart/laravel-metrics
+   ```
+
+2. Composer asks if you trust a plugin:
+
+   ```text
+   Do you trust "tbachert/spi" to execute code and wish to enable it now? (writes "allow-plugins" to composer.json) [y,n,d,?]
+   ```
+
+   Answer `n`. The package does not need this plugin.
+
+   At the end, Composer shows the version it installed:
+
+   ```text
+   nwidart/laravel-metrics .................................... DONE
+   ...
+   Using version ^0.2.0 for nwidart/laravel-metrics
+   ```
+
+   The package registers itself. It already records every request.
+
+</Steps>
+
+## Read the metrics
+
+By default, the package keeps its metrics in Redis. We have no Redis, so we tell it to use the `file` cache store instead. We also turn on the route that shows the metrics.
+
+<Steps>
+
+1. Add these lines at the end of the `.env` file:
+
+   ```dotenv title=".env"
+   METRICS_STORE=cache
+   METRICS_CACHE_STORE=file
+   METRICS_PROMETHEUS=true
+   ```
+
+2. Start the development server:
+
+   ```bash
+   php artisan serve
+   ```
+
+   ```text
+   INFO  Server running on [http://127.0.0.1:8000].
+   ```
+
+   Keep it running. Open a second terminal in the `shop` folder for the next commands.
+
+3. Open the home page once, so that the application has some traffic to record:
+
+   ```bash
+   curl -s -o /dev/null http://127.0.0.1:8000/
+   ```
+
+4. Read the metrics, and keep only two lines of them:
+
+   ```bash
+   curl -s http://127.0.0.1:8000/metrics | grep -E '^(laravel_info|http_server_request_duration_seconds_count)'
+   ```
+
+   ```text
+   http_server_request_duration_seconds_count{http_request_method="GET",http_response_status_code="200",http_route="/",network_protocol_version="1.1",otel_scope_name="nwidart/laravel-metrics",url_scheme="http"} 1
+   laravel_info{laravel_version="13.43.0",otel_scope_name="nwidart/laravel-metrics",php_sapi="cli-server",process_runtime_name="php",process_runtime_version="8.4.27"} 1
+   ```
+
+   The first line says that the route `/` answered one `GET` request with the status `200`. The second line shows your Laravel and PHP versions, which can be other than these.
+
+   Run `curl -s http://127.0.0.1:8000/metrics` without `grep` to see everything: the request durations in buckets, the database queries, and OPcache and disk usage.
+
+</Steps>
+
+## Record a metric of our own
+
+The shop places orders. We count each order with a counter named `orders.placed`.
+
+<Steps>
+
+1. Replace the contents of `routes/web.php` with this:
+
+   ```php title="routes/web.php" ins={4,10-14}
+   <?php
+
+   use Illuminate\Support\Facades\Route;
+   use Nwidart\Metrics\Facades\Metrics;
+
+   Route::get('/', function () {
+       return view('welcome');
+   });
+
+   Route::get('/orders/place', function () {
+       Metrics::meter()->createCounter('orders.placed', '{order}')->add(1, ['channel' => 'web']);
+
+       return 'Order placed.';
+   });
+   ```
+
+   Each call to `/orders/place` adds 1 to the counter, with the attribute `channel` set to `web`.
+
+2. Place three orders:
+
+   ```bash
+   curl -s http://127.0.0.1:8000/orders/place
+   curl -s http://127.0.0.1:8000/orders/place
+   curl -s http://127.0.0.1:8000/orders/place
+   ```
+
+   Each call answers:
+
+   ```text
+   Order placed.
+   ```
+
+3. Read the counter:
+
+   ```bash
+   curl -s http://127.0.0.1:8000/metrics | grep '^orders_placed_total'
+   ```
+
+   ```text
+   orders_placed_total{channel="web",otel_scope_name="app"} 3
+   ```
+
+   The counter is 3. In the Prometheus format, `orders.placed` becomes `orders_placed_total`.
+
+4. Place one more order, and read the counter again:
+
+   ```bash
+   curl -s http://127.0.0.1:8000/orders/place
+   curl -s http://127.0.0.1:8000/metrics | grep '^orders_placed_total'
+   ```
+
+   ```text
+   orders_placed_total{channel="web",otel_scope_name="app"} 4
+   ```
+
+   Each request adds to the same total. The total stays in the store between requests.
+
+5. Stop the development server with `Ctrl+C` in the first terminal.
+
+</Steps>
+
+## Test the counter
+
+A test must not write into our store. `Metrics::fake()` keeps the metrics of the test in memory.
+
+<Steps>
+
+1. Create a feature test:
+
+   ```bash
+   php artisan make:test OrderMetricsTest
+   ```
+
+   ```text
+   INFO  Test [tests/Feature/OrderMetricsTest.php] created successfully.
+   ```
+
+2. Replace the contents of `tests/Feature/OrderMetricsTest.php` with this:
+
+   ```php title="tests/Feature/OrderMetricsTest.php"
+   <?php
+
+   namespace Tests\Feature;
+
+   use Nwidart\Metrics\Facades\Metrics;
+   use Tests\TestCase;
+
+   class OrderMetricsTest extends TestCase
+   {
+       public function test_placing_an_order_counts_it(): void
+       {
+           $metrics = Metrics::fake();
+
+           $this->get('/orders/place')->assertOk();
+           $this->get('/orders/place')->assertOk();
+
+           $metrics->assertValue('orders.placed', 2, ['channel' => 'web']);
+           $metrics->assertRecorded('http.server.request.duration', ['http.route' => '/orders/place']);
+       }
+   }
+   ```
+
+   The test places two orders. Then it checks that the counter is 2, and that the package recorded the duration of the requests to `/orders/place`.
+
+3. Run the test:
+
+   ```bash
+   php artisan test --filter=OrderMetricsTest
+   ```
+
+   ```text
+   PASS  Tests\Feature\OrderMetricsTest
+   ✓ placing an order counts it                          0.08s
+
+   Tests:    1 passed (5 assertions)
+   ```
+
+</Steps>
+
+## What we did
+
+We installed Laravel Metrics in a new application. It recorded the HTTP requests with no code. We read the metrics in the Prometheus format, counted orders with a counter of our own, and tested that counter without touching the store.
+
+## Next steps
+
+- [Set up for production](/laravel-metrics/guides/install-in-production/), with Redis.
+- [Scrape with Prometheus](/laravel-metrics/guides/scrape-with-prometheus/), and protect the route.
+- [Push over OTLP](/laravel-metrics/guides/push-over-otlp/) to an OpenTelemetry Collector or a backend.
+- [Record your own metrics](/laravel-metrics/guides/record-custom-metrics/): counters, histograms and their buckets.
+- Read [how it works](/laravel-metrics/explanation/how-it-works/) to learn why each request merges into a store.
