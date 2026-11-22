@@ -238,7 +238,7 @@ A pattern that starts with `/` matches the URI template (`/up`). Any other patte
 
 ### Queries per request and per job
 
-`laravel.db.queries` has one value per HTTP request and per queued job: the number of successful queries it ran, on every connection. A route whose requests run many queries often has an N+1, a relation loaded once per model instead of once for all of them. The first bucket holds the requests and jobs that ran no query. Requests to `metrics.ignore_routes` are not recorded. A sync job's queries count for the request that dispatched it. Commands are not recorded.
+`laravel.db.queries` has one value per HTTP request and per queued job: the number of successful queries it ran, on every connection. A route whose requests run many queries often has an N+1, a relation loaded once per model instead of once for all of them. The first bucket holds the requests and jobs that ran no query. Requests to `metrics.ignore_routes` are not recorded. A sync job's queries count for the request that dispatched it. Commands are not recorded. The count ends when the response is ready, so the queries of a streamed response (`response()->stream()`), which run while it is sent, are not counted.
 
 Transactions and query counts share the `db` switch (`METRICS_DB`) with `db.client.operation.duration`.
 
@@ -301,13 +301,13 @@ These are read when the metrics are exported (a scrape of `/metrics`, or `metric
 | `php.fpm.connections.accepted`, `php.fpm.max_children_reached`, `php.fpm.slow_requests` (counters) | | Under PHP-FPM |
 | `system.cpu.load_average.1m` | | Not on Windows |
 | `system.filesystem.usage` (bytes) | `system.filesystem.state`: `used`, `free` | The disk that holds the application |
-| `laravel.db.server.connections` | `db.system.name`, `db.namespace`, `server.address`, `server.port` | The default connection is MySQL, MariaDB, PostgreSQL or SQL Server |
-| `laravel.db.server.connections.max` | The same | The default connection is MySQL, MariaDB, PostgreSQL or SQL Server |
+| `laravel.db.server.connections` | `db.system.name`, `db.namespace`, `server.address`, `server.port` | The default connection is MySQL, MariaDB or PostgreSQL |
+| `laravel.db.server.connections.max` | The same | The default connection is MySQL, MariaDB or PostgreSQL |
 | `laravel.db.migrations.pending` | | Always |
 
 The semantic conventions define no PHP runtime metrics, so the PHP ones use a `php.` namespace, like `jvm.*` and `v8js.*`. `system.filesystem.usage` follows the conventions. `system.cpu.load_average.1m` is the name of the Collector's host metrics receiver.
 
-The database metrics run one query each on every export, and have their own switches: `METRICS_DB_SERVER` for the connections, `METRICS_MIGRATIONS` for the pending migrations. `laravel.db.server.connections` counts the connections open on the server of the default connection, from every client, as `php artisan db:monitor` does. On SQL Server, it counts only the running sessions. Under PHP-FPM, each busy worker holds one connection, so a server at its maximum refuses the next request's. `laravel.db.migrations.pending` is the number of migrations `php artisan migrate` would run: above 0 after a deploy, the code expects a schema the database does not have yet. A database that cannot be reached leaves these metrics out, without an error.
+The database metrics run one query each on every export, and have their own switches: `METRICS_DB_SERVER` for the connections, `METRICS_MIGRATIONS` for the pending migrations. `laravel.db.server.connections` counts the client connections open on the server of the default connection, from every client: `Threads_connected` on MySQL and MariaDB, the client backends of `pg_stat_activity` on PostgreSQL. SQL Server has neither metric: its session count leaves out idle sessions, and `@@max_connections` is not the configured limit. Under PHP-FPM, each busy worker holds one connection, so a server at its maximum refuses the next request's. `laravel.db.migrations.pending` is the number of migrations `php artisan migrate` would run, without those it skips (`Migrator::withoutMigrations()`, a `shouldRun()` that returns `false`): above 0 after a deploy, the code expects a schema the database does not have yet. A database that cannot be reached leaves these metrics out, without an error.
 
 OPcache is off on the command line by default, so `metrics:push` usually has no OPcache metrics. There are no metrics for the exporting process itself (CPU time, memory), because each export runs in another short-lived process.
 

@@ -32,6 +32,9 @@ final class EloquentMetrics
     /** @var array<string, array<string, int>> event => model class => count */
     private array $pending = [];
 
+    /** @var array<string, int> model class => the running total of its last ModelsPruned event */
+    private array $prunedTotals = [];
+
     private ?MeterProviderInterface $provider = null;
 
     private CounterInterface $models;
@@ -51,10 +54,18 @@ final class EloquentMetrics
         }
     }
 
+    /**
+     * Pruning dispatches a running total after each chunk, which only goes up within a run. A
+     * total that does not exceed the last one starts another run.
+     */
     public function pruned(ModelsPruned $event): void
     {
+        $last = $this->prunedTotals[$event->model] ?? 0;
+        $this->prunedTotals[$event->model] = $event->count;
+        $count = $event->count > $last ? $event->count - $last : $event->count;
+
         $this->instruments();
-        $this->pruned->add($event->count, ['laravel.eloquent.model' => $event->model, ...$this->contributors->for('laravel.eloquent.models.pruned', $event)]);
+        $this->pruned->add($count, ['laravel.eloquent.model' => $event->model, ...$this->contributors->for('laravel.eloquent.models.pruned', $event)]);
     }
 
     /** Adds the models counted since the last call to the counter. Metrics::flush() calls it. */

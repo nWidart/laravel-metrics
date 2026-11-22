@@ -9,6 +9,7 @@ use Illuminate\Database\Events\ModelsPruned;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Nwidart\Metrics\Facades\Metrics;
+use Nwidart\Metrics\Tests\Fixtures\ExpiredOrder;
 use Nwidart\Metrics\Tests\Fixtures\Order;
 use Orchestra\Testbench\Attributes\DefineEnvironment;
 use PHPUnit\Framework\Attributes\Test;
@@ -83,7 +84,32 @@ final class EloquentMetricsTest extends TestCase
     }
 
     #[Test]
-    public function pruned_models_are_counted_by_class(): void
+    public function a_fake_does_not_inherit_models_counted_before_it(): void
+    {
+        Order::create(['total' => 10]);
+
+        $fake = Metrics::fake();
+        Order::create(['total' => 20]);
+
+        $fake->assertValue('laravel.eloquent.models', 1, ['laravel.eloquent.event' => 'created']);
+    }
+
+    #[Test]
+    public function pruned_models_are_counted_once_across_chunks_and_runs(): void
+    {
+        ExpiredOrder::insert([['total' => -1], ['total' => -2], ['total' => -3], ['total' => 4]]);
+        // 3 models in chunks of 2: Laravel dispatches the running totals 2, then 3.
+        $this->artisan('model:prune', ['--model' => ExpiredOrder::class, '--chunk' => 2])->assertSuccessful();
+        // model:prune forgets the ModelsPruned listeners when it ends: the second run still counts.
+        ExpiredOrder::insert([['total' => -5], ['total' => -6], ['total' => -7]]);
+        $this->artisan('model:prune', ['--model' => ExpiredOrder::class, '--chunk' => 2])->assertSuccessful();
+        $this->app->terminate();
+
+        $this->assertSame([[['laravel.eloquent.model' => ExpiredOrder::class], 6]], $this->sums('laravel.eloquent.models.pruned'));
+    }
+
+    #[Test]
+    public function a_running_total_that_does_not_grow_starts_another_run(): void
     {
         event(new ModelsPruned(Order::class, 500));
         event(new ModelsPruned(Order::class, 20));

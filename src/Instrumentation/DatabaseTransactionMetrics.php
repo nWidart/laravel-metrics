@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nwidart\Metrics\Instrumentation;
 
+use Illuminate\Database\Connection;
 use Illuminate\Database\Events\ConnectionEvent;
 use Illuminate\Database\Events\TransactionBeginning;
 use Illuminate\Database\Events\TransactionCommitted;
@@ -11,6 +12,7 @@ use Illuminate\Database\Events\TransactionRolledBack;
 use Nwidart\Metrics\AttributeContributors;
 use OpenTelemetry\API\Metrics\HistogramInterface;
 use OpenTelemetry\API\Metrics\MeterProviderInterface;
+use WeakMap;
 
 /**
  * Records laravel.db.transaction.duration, one value per outer transaction, from its beginning to
@@ -20,7 +22,8 @@ use OpenTelemetry\API\Metrics\MeterProviderInterface;
  *
  * A nested transaction (a savepoint) is part of its outer transaction and is not recorded on its
  * own. Laravel dispatches no event when a commit fails or when the connection is lost: such a
- * transaction is not recorded, and the next one on the connection starts afresh.
+ * transaction is not recorded. Starts are kept per connection object, as a stack: an afterCommit
+ * callback that runs a transaction does so before the commit event of the transaction that ran it.
  */
 final class DatabaseTransactionMetrics
 {
@@ -29,8 +32,8 @@ final class DatabaseTransactionMetrics
 
     private readonly HistogramInterface $duration;
 
-    /** @var array<string, int|float> connection name => start of its outer transaction, from hrtime() */
-    private array $started = [];
+    /** @var WeakMap<Connection, list<int|float>> connection => starts of its outer transactions, from hrtime() */
+    private WeakMap $started;
 
     /** @var array<string, array<non-empty-string, string|int>> connection name => attributes */
     private array $connections = [];
@@ -43,13 +46,16 @@ final class DatabaseTransactionMetrics
             'Duration of database transactions, from their beginning to their commit or rollback.',
             ['ExplicitBucketBoundaries' => self::BUCKETS],
         );
+        $this->started = new WeakMap;
     }
 
     public function began(TransactionBeginning $event): void
     {
         // The event comes after the level went up: 1 is an outer transaction.
         if ($event->connection->transactionLevel() === 1) {
-            $this->started[$event->connectionName] = hrtime(true);
+            $starts = $this->started[$event->connection] ?? [];
+            $starts[] = hrtime(true);
+            $this->started[$event->connection] = $starts;
         }
     }
 
@@ -66,14 +72,15 @@ final class DatabaseTransactionMetrics
     private function ended(ConnectionEvent $event, string $result): void
     {
         // The event comes after the level went down: 0 ends the outer transaction.
-        $name = $event->connectionName;
-        if ($event->connection->transactionLevel() !== 0 || ! isset($this->started[$name])) {
+        $connection = $event->connection;
+        $starts = $this->started[$connection] ?? [];
+        if ($connection->transactionLevel() !== 0 || $starts === []) {
             return;
         }
-        $elapsed = (hrtime(true) - $this->started[$name]) / 1e9;
-        unset($this->started[$name]);
+        $elapsed = (hrtime(true) - array_pop($starts)) / 1e9;
+        $this->started[$connection] = $starts;
 
-        $attributes = $this->connections[$name] ??= ConnectionAttributes::of($event->connection);
+        $attributes = $this->connections[$event->connectionName] ??= ConnectionAttributes::of($connection);
         $attributes['laravel.db.transaction.result'] = $result;
 
         $this->duration->record(max(0.0, $elapsed), [...$attributes, ...$this->contributors->for('laravel.db.transaction.duration', $event)]);

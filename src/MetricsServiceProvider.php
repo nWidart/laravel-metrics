@@ -18,6 +18,7 @@ use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Contracts\Foundation\CachesRoutes;
 use Illuminate\Contracts\Routing\Registrar;
 use Illuminate\Database\Events\ModelsPruned;
@@ -91,6 +92,7 @@ final class MetricsServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/metrics.php', 'metrics');
+        $this->mergeInstrumentationDefaults();
 
         $this->app->singleton(MetricStore::class, function (): MetricStore {
             $config = $this->config();
@@ -222,7 +224,10 @@ final class MetricsServiceProvider extends ServiceProvider
             foreach (EloquentMetrics::EVENTS as $event) {
                 $events->listen("eloquent.{$event}: *", $count);
             }
-            $events->listen(ModelsPruned::class, [EloquentMetrics::class, 'pruned']);
+            // A pattern, not the class: model:prune forgets every ModelsPruned listener when it ends.
+            $events->listen(ModelsPruned::class.'*', fn (string $eventName, array $payload) => $payload[0] instanceof ModelsPruned
+                ? $this->app->make(EloquentMetrics::class)->pruned($payload[0])
+                : null);
         }
         if ($this->config()->get('metrics.instrumentation.queue')) {
             $events->listen(JobQueued::class, [QueueMetrics::class, 'queued']);
@@ -270,6 +275,23 @@ final class MetricsServiceProvider extends ServiceProvider
                 }
             },
         );
+    }
+
+    /**
+     * A config/metrics.php published by an older version has no switch for newer instrumentation,
+     * and mergeConfigFrom() merges top-level keys only: those switches take their defaults.
+     */
+    private function mergeInstrumentationDefaults(): void
+    {
+        if ($this->app instanceof CachesConfiguration && $this->app->configurationIsCached()) {
+            return;
+        }
+
+        $config = $this->config();
+        /** @var array{instrumentation: array<string, mixed>} $defaults */
+        $defaults = require __DIR__.'/../config/metrics.php';
+        $published = $config->get('metrics.instrumentation');
+        $config->set('metrics.instrumentation', [...$defaults['instrumentation'], ...(is_array($published) ? $published : [])]);
     }
 
     /** The handler is built only when it is first needed, which is usually never. */

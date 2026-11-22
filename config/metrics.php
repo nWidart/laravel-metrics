@@ -109,7 +109,7 @@ return [
         'runtime' => env('METRICS_RUNTIME', true),
         // Read on export only, with a query each: laravel.db.server.connections
         // and .max of the default connection's server (MySQL, MariaDB,
-        // PostgreSQL, SQL Server), and laravel.db.migrations.pending
+        // PostgreSQL), and laravel.db.migrations.pending
         'db_server' => env('METRICS_DB_SERVER', true),
         'migrations' => env('METRICS_MIGRATIONS', true),
     ],

@@ -69,6 +69,41 @@ final class DatabaseTransactionMetricsTest extends TestCase
     }
 
     #[Test]
+    public function a_transaction_run_by_an_after_commit_callback_is_recorded_with_the_one_that_ran_it(): void
+    {
+        DB::transaction(function (): void {
+            DB::afterCommit(fn () => DB::transaction(fn () => DB::select('select 1')));
+        });
+        $this->app->terminate();
+
+        $points = $this->histogramPoints('laravel.db.transaction.duration');
+        $this->assertCount(1, $points);
+        $this->assertSame(2, $points[0]->count);
+    }
+
+    #[Test]
+    public function two_connection_objects_with_one_name_have_their_own_transactions(): void
+    {
+        $read = DB::connection('testing');
+        $write = DB::connection('testing::write');
+        $this->assertNotSame($read, $write);
+        $this->assertSame($read->getName(), $write->getName());
+
+        $read->beginTransaction();
+        $write->beginTransaction();
+        $read->commit();
+        $write->rollBack();
+        $this->app->terminate();
+
+        $byResult = [];
+        foreach ($this->histogramPoints('laravel.db.transaction.duration') as $point) {
+            $byResult[$point->attributes->get('laravel.db.transaction.result')] = $point->count;
+        }
+        ksort($byResult);
+        $this->assertSame(['committed' => 1, 'rolled_back' => 1], $byResult);
+    }
+
+    #[Test]
     #[DefineEnvironment('disableDb')]
     public function it_can_be_turned_off(): void
     {

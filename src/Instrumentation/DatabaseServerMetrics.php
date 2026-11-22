@@ -13,12 +13,11 @@ use Throwable;
 /**
  * Metrics read when the store is exported (see ExportTimeMetrics), from the server of the default
  * database connection, with the attributes of db.client.operation.duration that describe it:
- *   laravel.db.server.connections       connections open on the server, from every client, as
- *                                       `php artisan db:monitor` counts them
+ *   laravel.db.server.connections       client connections open on the server, from every client
  *   laravel.db.server.connections.max   the most connections the server accepts
  * Under PHP-FPM, each busy worker holds a connection: a server that reaches its maximum refuses
- * the next request's. MySQL, MariaDB and PostgreSQL have both metrics. SQL Server counts only
- * running sessions, and SQLite has none. A server that cannot be reached leaves both metrics out:
+ * the next request's. MySQL, MariaDB and PostgreSQL have both metrics. SQL Server has none: its
+ * session count leaves out idle sessions, and its limit is not the configured one. Nor has SQLite. A server that cannot be reached leaves both metrics out:
  * the database health check of the application says why.
  */
 final class DatabaseServerMetrics
@@ -28,7 +27,14 @@ final class DatabaseServerMetrics
         'mysql' => 'select @@max_connections',
         'mariadb' => 'select @@max_connections',
         'pgsql' => 'show max_connections',
-        'sqlsrv' => 'select @@max_connections',
+    ];
+
+    /**
+     * Laravel driver name => the query that counts the client connections, where threadCount()
+     * counts more: on PostgreSQL, it also counts the background processes.
+     */
+    private const OPEN_CONNECTIONS = [
+        'pgsql' => "select count(*) from pg_stat_activity where backend_type = 'client backend'",
     ];
 
     public function __construct(private readonly ConnectionResolverInterface $db) {}
@@ -40,7 +46,8 @@ final class DatabaseServerMetrics
             if (! $connection instanceof Connection || ! isset(self::MAX_CONNECTIONS[$connection->getDriverName()])) {
                 return;
             }
-            $open = $connection->threadCount();
+            $driver = $connection->getDriverName();
+            $open = isset(self::OPEN_CONNECTIONS[$driver]) ? $connection->scalar(self::OPEN_CONNECTIONS[$driver]) : $connection->threadCount();
             $max = $connection->scalar(self::MAX_CONNECTIONS[$connection->getDriverName()]);
         } catch (Throwable) {
             return;

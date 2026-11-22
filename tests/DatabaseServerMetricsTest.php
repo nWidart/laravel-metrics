@@ -6,8 +6,11 @@ namespace Nwidart\Metrics\Tests;
 
 use Closure;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\Connection;
 use Illuminate\Database\ConnectionResolverInterface;
+use Illuminate\Database\Migrations\Migrator;
 use Illuminate\Database\MySqlConnection;
+use Illuminate\Database\PostgresConnection;
 use Mockery;
 use Nwidart\Metrics\ExportTimeMetrics;
 use Nwidart\Metrics\Instrumentation\DatabaseServerMetrics;
@@ -41,6 +44,32 @@ final class DatabaseServerMetricsTest extends TestCase
     }
 
     #[Test]
+    public function postgresql_counts_only_client_connections(): void
+    {
+        $connection = new class extends PostgresConnection
+        {
+            public function __construct()
+            {
+                parent::__construct(fn () => throw new RuntimeException('not connected'), 'shop', '', ['driver' => 'pgsql', 'name' => 'pgsql']);
+            }
+
+            public function scalar($query, $bindings = [], $useReadPdo = true)
+            {
+                return match ($query) {
+                    "select count(*) from pg_stat_activity where backend_type = 'client backend'" => 12,
+                    'show max_connections' => '100',
+                    default => throw new RuntimeException("Unexpected query [{$query}]."),
+                };
+            }
+        };
+
+        $output = $this->render(new DatabaseServerMetrics($this->resolver($connection)));
+
+        $this->assertStringContainsString('laravel_db_server_connections{db_namespace="shop",db_system_name="postgresql",otel_scope_name="nwidart/laravel-metrics"} 12', $output);
+        $this->assertStringContainsString('laravel_db_server_connections_max{db_namespace="shop",db_system_name="postgresql",otel_scope_name="nwidart/laravel-metrics"} 100', $output);
+    }
+
+    #[Test]
     public function a_server_that_cannot_be_reached_leaves_the_metrics_out(): void
     {
         $connection = $this->mysql([], fn () => throw new RuntimeException('Connection refused'));
@@ -64,6 +93,22 @@ final class DatabaseServerMetricsTest extends TestCase
         $this->artisan('migrate')->assertSuccessful();
 
         $this->assertStringContainsString("laravel_db_migrations_pending{otel_scope_name=\"nwidart/laravel-metrics\"} 0\n", (string) $this->get('/metrics')->assertOk()->getContent());
+    }
+
+    #[Test]
+    public function migrations_that_migrate_skips_are_not_pending(): void
+    {
+        unset($this->app[Migrator::class]);
+        $migrator = $this->app->make('migrator');
+        $migrator->path(__DIR__.'/Fixtures/migrations');
+        $migrator->path(__DIR__.'/Fixtures/skipped-migrations');
+        Migrator::withoutMigrations(['2026_01_01_000000_create_orders_table']);
+
+        try {
+            $this->assertStringContainsString("laravel_db_migrations_pending{otel_scope_name=\"nwidart/laravel-metrics\"} 1\n", (string) $this->get('/metrics')->assertOk()->getContent());
+        } finally {
+            Migrator::withoutMigrations([]);
+        }
     }
 
     #[Test]
@@ -104,7 +149,7 @@ final class DatabaseServerMetricsTest extends TestCase
         };
     }
 
-    private function resolver(MySqlConnection $connection): ConnectionResolverInterface
+    private function resolver(Connection $connection): ConnectionResolverInterface
     {
         $resolver = Mockery::mock(ConnectionResolverInterface::class);
         $resolver->shouldReceive('connection')->andReturn($connection);
