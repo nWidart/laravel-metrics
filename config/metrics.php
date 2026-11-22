@@ -5,19 +5,21 @@ declare(strict_types=1);
 return [
 
     /*
-    | Turn all metric recording and export on or off.
+    | Turn all metric recording and export on or off. When off, the meter
+    | provider records nothing and nothing touches Redis.
     */
     'enabled' => env('METRICS_ENABLED', true),
 
     /*
     | Where each request merges its metrics. PHP-FPM keeps no state between
     | requests, so the store holds the cumulative values for all workers.
-    | The Redis store uses a connection from config/database.php.
+    | The store uses a Redis connection from config/database.php; the
+    | connection's own key prefix is kept. The braces in the prefix are a
+    | Redis Cluster hash tag that keeps every store key in one slot.
     */
     'store' => [
-        'driver' => env('METRICS_STORE', 'redis'),
         'connection' => env('METRICS_REDIS_CONNECTION', 'default'),
-        'prefix' => env('METRICS_PREFIX', 'metrics:'),
+        'prefix' => env('METRICS_PREFIX', '{metrics}:'),
     ],
 
     /*
@@ -25,5 +27,21 @@ return [
     | to one overflow series, as the OpenTelemetry specification defines.
     */
     'cardinality_limit' => 2000,
+
+    /*
+    | Make this package's meter provider the OpenTelemetry global one, so
+    | that libraries which record through the OpenTelemetry API
+    | (Globals::meterProvider()) feed the store too.
+    */
+    'register_global' => env('METRICS_REGISTER_GLOBAL', true),
+
+    /*
+    | Built-in instrumentation, following the OpenTelemetry semantic
+    | conventions.
+    */
+    'instrumentation' => [
+        // http.server.request.duration
+        'http' => env('METRICS_HTTP', true),
+    ],
 
 ];
