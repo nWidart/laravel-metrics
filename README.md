@@ -1,4 +1,4 @@
-# Laravel Metrics
+<img src="https://raw.githubusercontent.com/nWidart/laravel-metrics/main/.github/art/banner.png" alt="Laravel Metrics" width="100%">
 
 [![CI](https://github.com/nWidart/laravel-metrics/actions/workflows/ci.yml/badge.svg)](https://github.com/nWidart/laravel-metrics/actions/workflows/ci.yml)
 [![Latest version](https://img.shields.io/packagist/v/nwidart/laravel-metrics)](https://packagist.org/packages/nwidart/laravel-metrics)
