@@ -6,8 +6,8 @@ namespace Nwidart\Metrics\Http;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Http\Response;
+use Nwidart\MetricsStore\MetricStore;
 use Nwidart\MetricsStore\Prometheus\PrometheusTextFormat;
-use Nwidart\MetricsStore\RedisStore;
 use OpenTelemetry\SDK\Resource\ResourceInfoFactory;
 use Throwable;
 
@@ -17,7 +17,7 @@ use Throwable;
  */
 final class PrometheusController
 {
-    public function __invoke(RedisStore $store, PrometheusTextFormat $format, Repository $config): Response
+    public function __invoke(MetricStore $store, PrometheusTextFormat $format, Repository $config): Response
     {
         try {
             $metrics = $store->collect(ResourceInfoFactory::emptyResource());

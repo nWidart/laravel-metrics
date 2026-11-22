@@ -10,6 +10,8 @@ use Illuminate\Cache\Events\KeyForgetFailed;
 use Illuminate\Cache\Events\KeyForgotten;
 use Illuminate\Cache\Events\KeyWriteFailed;
 use Illuminate\Cache\Events\KeyWritten;
+use Illuminate\Contracts\Cache\Factory as CacheFactory;
+use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\CachesRoutes;
@@ -23,12 +25,15 @@ use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Queue\Events\JobQueued;
 use Illuminate\Queue\Jobs\SyncJob;
 use Illuminate\Support\ServiceProvider;
+use InvalidArgumentException;
 use Nwidart\Metrics\Http\PrometheusController;
 use Nwidart\Metrics\Instrumentation\CacheMetrics;
 use Nwidart\Metrics\Instrumentation\DatabaseClientMetrics;
 use Nwidart\Metrics\Instrumentation\HttpServerMetrics;
 use Nwidart\Metrics\Instrumentation\QueueMetrics;
 use Nwidart\Metrics\Redis\LaravelRedisClient;
+use Nwidart\Metrics\Store\CacheStore;
+use Nwidart\MetricsStore\MetricStore;
 use Nwidart\MetricsStore\RedisStore;
 use Nwidart\MetricsStore\StoreExporter;
 use OpenTelemetry\API\Globals;
@@ -47,17 +52,18 @@ final class MetricsServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/metrics.php', 'metrics');
 
-        $this->app->singleton(RedisStore::class, function (): RedisStore {
+        $this->app->singleton(MetricStore::class, function (): MetricStore {
             $config = $this->config();
-            $connection = $config->get('metrics.store.connection');
             $prefix = $config->get('metrics.store.prefix');
+            $prefix = is_string($prefix) ? $prefix : '{metrics}:';
             $limit = $config->get('metrics.cardinality_limit');
+            $limit = is_numeric($limit) ? (int) $limit : 2000;
 
-            return new RedisStore(
-                new LaravelRedisClient($this->app->make('redis'), is_string($connection) ? $connection : null),
-                is_string($prefix) ? $prefix : '{metrics}:',
-                is_numeric($limit) ? (int) $limit : 2000,
-            );
+            return match ($driver = $config->get('metrics.store.driver')) {
+                'redis' => $this->redisStore($prefix, $limit),
+                'cache' => $this->cacheStore($prefix, $limit),
+                default => throw new InvalidArgumentException('Unknown metrics store driver ['.(is_scalar($driver) ? $driver : get_debug_type($driver)).']: use redis or cache.'),
+            };
         });
 
         // One provider per application instance, so one per PHP-FPM request. It keeps only the
@@ -70,7 +76,7 @@ final class MetricsServiceProvider extends ServiceProvider
             return (new MeterProviderBuilder)
                 // The store keeps no resource, and the resource detectors cost time on every request.
                 ->setResource(ResourceInfoFactory::emptyResource())
-                ->addReader(new ExportingReader(new StoreExporter($this->app->make(RedisStore::class))))
+                ->addReader(new ExportingReader(new StoreExporter($this->app->make(MetricStore::class))))
                 ->build();
         });
         $this->app->alias(MeterProviderInterface::class, ApiMeterProvider::class);
@@ -168,6 +174,25 @@ final class MetricsServiceProvider extends ServiceProvider
         } catch (Throwable) {
             // StoreExporter already logs store failures through the OpenTelemetry logger.
         }
+    }
+
+    private function redisStore(string $prefix, int $limit): RedisStore
+    {
+        $connection = $this->config()->get('metrics.store.connection');
+
+        return new RedisStore(new LaravelRedisClient($this->app->make('redis'), is_string($connection) ? $connection : null), $prefix, $limit);
+    }
+
+    private function cacheStore(string $prefix, int $limit): CacheStore
+    {
+        $name = $this->config()->get('metrics.store.cache_store');
+        // The raw store: a cache repository would dispatch events for the store's own reads and writes.
+        $store = $this->app->make(CacheFactory::class)->store(is_string($name) && $name !== '' ? $name : null)->getStore();
+        if (! $store instanceof LockProvider) {
+            throw new InvalidArgumentException('The metrics cache store must support locks (every Laravel cache driver except apc does).');
+        }
+
+        return new CacheStore($store, $prefix.'state', $limit);
     }
 
     private function enabled(): bool

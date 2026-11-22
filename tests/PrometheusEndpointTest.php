@@ -7,6 +7,7 @@ namespace Nwidart\Metrics\Tests;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Contracts\Foundation\Application;
 use Nwidart\Metrics\Redis\LaravelRedisClient;
+use Nwidart\MetricsStore\MetricStore;
 use Nwidart\MetricsStore\RedisStore;
 use OpenTelemetry\API\Metrics\MeterProviderInterface;
 use Orchestra\Testbench\Attributes\DefineEnvironment;
@@ -60,12 +61,12 @@ final class PrometheusEndpointTest extends TestCase
     #[DefineEnvironment('enablePrometheusWithUnreachableStore')]
     public function a_store_that_cannot_be_read_answers_503(): void
     {
-        $this->app->instance(RedisStore::class, new RedisStore(new LaravelRedisClient($this->app->make('redis'), 'unreachable')));
+        $this->app->instance(MetricStore::class, new RedisStore(new LaravelRedisClient($this->app->make('redis'), 'unreachable')));
 
         $this->get('/metrics')->assertStatus(503);
 
         // The next resolution builds the reachable store again, for tearDown().
-        $this->app->forgetInstance(RedisStore::class);
+        $this->app->forgetInstance(MetricStore::class);
     }
 
     protected function enablePrometheus(Application $app): void

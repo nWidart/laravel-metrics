@@ -13,13 +13,20 @@ return [
     /*
     | Where each request merges its metrics. PHP-FPM keeps no state between
     | requests, so the store holds the cumulative values for all workers.
-    | The store uses a Redis connection from config/database.php; the
-    | connection's own key prefix is kept. The braces in the prefix are a
-    | Redis Cluster hash tag that keeps every store key in one slot.
+    |
+    | "redis"  for production. Uses a Redis connection from
+    |          config/database.php; the connection's own key prefix is kept.
+    |          The braces in the prefix are a Redis Cluster hash tag that
+    |          keeps every store key in one slot.
+    | "cache"  for development without Redis. One entry in a Laravel cache
+    |          store (null is the default one), written under a lock, so
+    |          writers wait for each other. `cache:clear` removes it.
     */
     'store' => [
+        'driver' => env('METRICS_STORE', 'redis'),
         'connection' => env('METRICS_REDIS_CONNECTION', 'default'),
         'prefix' => env('METRICS_PREFIX', '{metrics}:'),
+        'cache_store' => env('METRICS_CACHE_STORE'),
     ],
 
     /*

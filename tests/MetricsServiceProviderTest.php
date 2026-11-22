@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Nwidart\Metrics\Tests;
 
 use Illuminate\Contracts\Foundation\Application;
-use Nwidart\MetricsStore\RedisStore;
+use Nwidart\MetricsStore\MetricStore;
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Metrics\MeterProviderInterface as ApiMeterProvider;
 use OpenTelemetry\SDK\Metrics\Data\Sum;
@@ -116,7 +116,7 @@ final class MetricsServiceProviderTest extends TestCase
     private function forgetRedis(): void
     {
         $this->app->forgetInstance('redis');
-        $this->app->forgetInstance(RedisStore::class);
+        $this->app->forgetInstance(MetricStore::class);
         $this->app->forgetInstance(MeterProviderInterface::class);
     }
 

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Nwidart\Metrics\Tests;
 
 use Nwidart\Metrics\MetricsServiceProvider;
-use Nwidart\MetricsStore\RedisStore;
+use Nwidart\MetricsStore\MetricStore;
 use OpenTelemetry\SDK\Metrics\Data\Histogram;
 use OpenTelemetry\SDK\Metrics\Data\HistogramDataPoint;
 use OpenTelemetry\SDK\Metrics\Data\Metric;
@@ -77,9 +77,9 @@ abstract class TestCase extends Orchestra
         return array_values(array_filter($keys, is_string(...)));
     }
 
-    protected function store(): RedisStore
+    protected function store(): MetricStore
     {
-        return $this->app->make(RedisStore::class);
+        return $this->app->make(MetricStore::class);
     }
 
     /**
