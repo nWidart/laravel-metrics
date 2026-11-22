@@ -1,8 +1,19 @@
 # Laravel Metrics
 
-OpenTelemetry metrics for Laravel that work under PHP-FPM.
+OpenTelemetry metrics for Laravel that work under PHP-FPM. HTTP requests, queries, queue jobs, cache operations, scheduled tasks and exceptions are recorded with no code; serve them to Prometheus or push them over OTLP.
 
-> **Status:** early development. Not usable yet.
+## Installation
+
+```bash
+composer require nwidart/laravel-metrics
+```
+
+The service provider registers itself. Recording starts at once, into the Redis `default` connection. Then pick how the metrics leave the application:
+
+- Prometheus scrapes them: set `METRICS_PROMETHEUS=true` and protect `GET /metrics` (see [Prometheus](#prometheus)).
+- They are pushed over OTLP: set `OTEL_EXPORTER_OTLP_ENDPOINT` and schedule `metrics:push` (see [OTLP push](#otlp-push)).
+
+Without Redis, for development, set `METRICS_STORE=cache` (see [Stores](#stores)).
 
 ## Requirements
 
