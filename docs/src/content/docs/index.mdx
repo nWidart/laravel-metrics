@@ -26,8 +26,8 @@ composer require nwidart/laravel-metrics
 <CardGrid>
 	<Card title="Zero-code instrumentation" icon="rocket">
 		`http.server.request.duration`, `db.client.operation.duration`, `messaging.process.duration`,
-		cache operations, scheduled tasks and reported exceptions, with the names of the
-		OpenTelemetry semantic conventions.
+		transactions, queries per request, Eloquent models, cache operations, scheduled tasks and
+		reported exceptions, with the names of the OpenTelemetry semantic conventions.
 	</Card>
 	<Card title="Built for PHP-FPM" icon="setting">
 		Each request records in memory, then merges into Redis after the response is sent. Every

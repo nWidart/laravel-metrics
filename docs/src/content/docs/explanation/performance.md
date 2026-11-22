@@ -35,6 +35,7 @@ There is no benchmark with a full Laravel application yet. The numbers come from
 | Record 8 values | About 30 µs |
 | Database listener, per query | About 2 µs, and about 3 µs with Laravel's event dispatch |
 | Cache listener, per cache event | About 1.5 µs, and about 3 µs with Laravel's event dispatch |
+| Eloquent listener, per model event | About 1.5 µs with Laravel's event dispatch, under 10% of the time Eloquent takes to hydrate a model from SQLite |
 | Merge, PHP worker time, after the response | 0.1 to 0.35 ms |
 | Merge, Redis CPU | About 25 µs for 8 values, 60–72 µs for a request with 30 queries |
 | Metrics read on export, per request | Nothing |

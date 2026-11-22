@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nwidart\Metrics\Tests;
 
 use Illuminate\Contracts\Foundation\Application;
+use Nwidart\Metrics\MetricsServiceProvider;
 use Nwidart\MetricsStore\MetricStore;
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Metrics\MeterProviderInterface as ApiMeterProvider;
@@ -23,6 +24,18 @@ final class MetricsServiceProviderTest extends TestCase
         $this->assertSame('default', config('metrics.store.connection'));
         $this->assertSame(2000, config('metrics.cardinality_limit'));
         $this->assertTrue(config('metrics.instrumentation.http'));
+    }
+
+    #[Test]
+    public function a_published_configuration_without_the_newer_switches_gets_their_defaults(): void
+    {
+        // A config/metrics.php published by an older version, read before the provider registers.
+        config()->set('metrics', ['instrumentation' => ['http' => true, 'db' => false]]);
+        (new MetricsServiceProvider($this->app))->register();
+
+        $this->assertFalse(config('metrics.instrumentation.db'));
+        $this->assertTrue(config('metrics.instrumentation.eloquent'));
+        $this->assertTrue(config('metrics.instrumentation.migrations'));
     }
 
     #[Test]

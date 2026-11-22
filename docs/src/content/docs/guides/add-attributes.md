@@ -31,6 +31,9 @@ Each built-in metric passes its own context to the callback:
 |---|---|
 | `http.server.request.duration` | `Illuminate\Foundation\Http\Events\RequestHandled` |
 | `db.client.operation.duration` | `Illuminate\Database\Events\QueryExecuted` |
+| `laravel.db.transaction.duration` | `TransactionCommitted` or `TransactionRolledBack` |
+| `laravel.db.queries` | `RequestHandled`, `JobProcessed`, `JobExceptionOccurred` or `JobTimedOut` |
+| `laravel.eloquent.models.pruned` | `ModelsPruned` |
 | `messaging.process.duration` | `JobProcessed`, `JobExceptionOccurred` or `JobTimedOut` |
 | `messaging.client.sent.messages` | `JobQueued` |
 | `laravel.cache.operations` | The `Illuminate\Cache\Events\CacheEvent` |

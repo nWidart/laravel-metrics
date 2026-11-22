@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nwidart\Metrics\Testing;
 
 use Illuminate\Contracts\Foundation\Application;
+use Nwidart\Metrics\Instrumentation\EloquentMetrics;
 use Nwidart\Metrics\Metrics;
 use Nwidart\Metrics\MetricsServiceProvider;
 use Nwidart\MetricsStore\InMemoryStore;
@@ -35,6 +36,10 @@ final class MetricsFake
 
     public static function install(Application $app): self
     {
+        // Models counted before the fake belong to the provider it replaces.
+        if ($app->resolved(EloquentMetrics::class)) {
+            $app->make(EloquentMetrics::class)->record();
+        }
         // Built again on the fake store: the provider and the listeners hold the store or instruments.
         foreach ([MeterProviderInterface::class, ...MetricsServiceProvider::INSTRUMENTATION] as $abstract) {
             $app->forgetInstance($abstract);

@@ -34,7 +34,7 @@ The keys below are in the order of the file.
 | [`push.timeout`](#pushtimeout) | None | `10` |
 | [`push.resource`](#pushresource) | `OTEL_SERVICE_NAME`, `APP_NAME`, `APP_ENV` | See below |
 | [`ignore_routes`](#ignore_routes) | None | `[]` |
-| [`instrumentation.*`](#instrumentation) | `METRICS_HTTP`, `METRICS_DB`, `METRICS_QUEUE`, `METRICS_CACHE`, `METRICS_SCHEDULER`, `METRICS_EXCEPTIONS`, `METRICS_RUNTIME` | `true` |
+| [`instrumentation.*`](#instrumentation) | `METRICS_HTTP`, `METRICS_DB`, `METRICS_ELOQUENT`, `METRICS_QUEUE`, `METRICS_CACHE`, `METRICS_SCHEDULER`, `METRICS_EXCEPTIONS`, `METRICS_RUNTIME`, `METRICS_DB_SERVER`, `METRICS_MIGRATIONS` | `true` |
 
 ## `enabled`
 
@@ -238,11 +238,16 @@ One boolean switch per built-in instrumentation. `false` registers none of its l
 | Key | Variable | Default | Metrics |
 |---|---|---|---|
 | `instrumentation.http` | `METRICS_HTTP` | `true` | [`http.server.request.duration`](/laravel-metrics/reference/metrics/http/) |
-| `instrumentation.db` | `METRICS_DB` | `true` | [`db.client.operation.duration`](/laravel-metrics/reference/metrics/database/) |
+| `instrumentation.db` | `METRICS_DB` | `true` | [`db.client.operation.duration`](/laravel-metrics/reference/metrics/database/), [`laravel.db.transaction.duration`](/laravel-metrics/reference/metrics/transactions/), [`laravel.db.queries`](/laravel-metrics/reference/metrics/query-count/) |
+| `instrumentation.eloquent` | `METRICS_ELOQUENT` | `true` | [`laravel.eloquent.models`, `laravel.eloquent.models.pruned`](/laravel-metrics/reference/metrics/eloquent/) |
 | `instrumentation.queue` | `METRICS_QUEUE` | `true` | [`messaging.process.duration`, `messaging.client.sent.messages`](/laravel-metrics/reference/metrics/queue/) |
 | `instrumentation.cache` | `METRICS_CACHE` | `true` | [`laravel.cache.operations`](/laravel-metrics/reference/metrics/cache/) |
 | `instrumentation.scheduler` | `METRICS_SCHEDULER` | `true` | [`laravel.scheduler.task.duration`](/laravel-metrics/reference/metrics/scheduler/) |
 | `instrumentation.exceptions` | `METRICS_EXCEPTIONS` | `true` | [`laravel.exceptions`](/laravel-metrics/reference/metrics/exceptions/) |
 | `instrumentation.runtime` | `METRICS_RUNTIME` | `true` | [Metrics read on export](/laravel-metrics/reference/metrics/export-time/) |
+| `instrumentation.db_server` | `METRICS_DB_SERVER` | `true` | [`laravel.db.server.connections`, `.max`](/laravel-metrics/reference/metrics/database-server/), read on export |
+| `instrumentation.migrations` | `METRICS_MIGRATIONS` | `true` | [`laravel.db.migrations.pending`](/laravel-metrics/reference/metrics/database-server/), read on export |
 
 The flush after each queued job does not depend on `instrumentation.queue`.
+
+A `config/metrics.php` published by an older version keeps its own `instrumentation` array. Each switch it lacks takes its default, so new instrumentation is on after an upgrade.

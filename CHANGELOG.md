@@ -1,7 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-11-22
 
+- Added database and Eloquent metrics:
+  - `laravel.db.transaction.duration`, per outer transaction, with `laravel.db.transaction.result` = `committed` or `rolled_back`;
+  - `laravel.db.queries`, the number of queries per HTTP request and per queued job;
+  - `laravel.eloquent.models`, models retrieved, created, updated, deleted and restored, per model class, and `laravel.eloquent.models.pruned`. Switch: `instrumentation.eloquent` (`METRICS_ELOQUENT`);
+  - read on export: `laravel.db.server.connections` and `laravel.db.server.connections.max` of the default connection's server (`instrumentation.db_server`, `METRICS_DB_SERVER`), and `laravel.db.migrations.pending` (`instrumentation.migrations`, `METRICS_MIGRATIONS`).
+- A `config/metrics.php` published by an older version gets the default of each `instrumentation` switch it lacks, so new instrumentation is on after an upgrade.
 - Fixed: the `Metrics` facade did not declare `exclude()` and `export()`, so IDEs and static analysis flagged them.
 
 ## 0.2.0 - 2026-11-22

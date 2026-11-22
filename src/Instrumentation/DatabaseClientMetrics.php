@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nwidart\Metrics\Instrumentation;
 
-use Illuminate\Database\Connection;
 use Illuminate\Database\Events\QueryExecuted;
 use Nwidart\Metrics\AttributeContributors;
 use OpenTelemetry\API\Metrics\HistogramInterface;
@@ -20,15 +19,6 @@ final class DatabaseClientMetrics
 {
     /** Bucket boundaries the semantic conventions advise, in seconds. */
     private const BUCKETS = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10];
-
-    /** Laravel driver name => db.system.name. */
-    private const SYSTEMS = [
-        'mysql' => 'mysql',
-        'mariadb' => 'mariadb',
-        'pgsql' => 'postgresql',
-        'sqlite' => 'sqlite',
-        'sqlsrv' => 'microsoft.sql_server',
-    ];
 
     /**
      * The first keyword of a query becomes db.operation.name only when it is one of these, so that
@@ -56,7 +46,7 @@ final class DatabaseClientMetrics
 
     public function handle(QueryExecuted $event): void
     {
-        $attributes = $this->connections[$event->connectionName] ??= self::connectionAttributes($event->connection);
+        $attributes = $this->connections[$event->connectionName] ??= ConnectionAttributes::of($event->connection);
 
         if (preg_match('/^\s*(?:\/\*.*?\*\/\s*)*([a-z]+)/is', $event->sql, $match) === 1) {
             $operation = strtoupper($match[1]);
@@ -66,31 +56,5 @@ final class DatabaseClientMetrics
         }
 
         $this->duration->record(max(0.0, (float) $event->time / 1000), [...$attributes, ...$this->contributors->for('db.client.operation.duration', $event)]);
-    }
-
-    /**
-     * @return array<non-empty-string, string|int>
-     */
-    private static function connectionAttributes(Connection $connection): array
-    {
-        $driver = $connection->getDriverName();
-        $attributes = ['db.system.name' => self::SYSTEMS[$driver] ?? 'other_sql'];
-
-        $database = $connection->getDatabaseName();
-        if ($database !== '') {
-            $attributes['db.namespace'] = $database;
-        }
-
-        // A connection with separate read and write hosts has no single server address.
-        $host = $connection->getConfig('host');
-        if (is_string($host) && $host !== '' && $driver !== 'sqlite' && $connection->getConfig('read') === null) {
-            $attributes['server.address'] = $host;
-            $port = $connection->getConfig('port');
-            if (is_numeric($port)) {
-                $attributes['server.port'] = (int) $port;
-            }
-        }
-
-        return $attributes;
     }
 }
