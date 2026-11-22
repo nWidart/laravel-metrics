@@ -34,11 +34,12 @@ The built-in metrics never use a value that a client or the data can make unboun
 - **Known HTTP methods only.** A method outside the standard methods becomes `_OTHER`, so that a client cannot create series with invented methods.
 - **Bounded status codes.** `http.response.status_code` has a small set of values. `error.type` on HTTP is the status code, only for 500 and above.
 - **A fixed list of SQL keywords.** `db.operation.name` is the first keyword of the query, only when it is one of a fixed list, such as `SELECT` or `INSERT`. The query text is never an attribute.
+- **No query text, no table.** `laravel.db.queries` has the route or the job class. `laravel.eloquent.models` has the model class and the event, never a key.
 - **No cache key.** `laravel.cache.operations` has the store, the operation and the result. The key would create one series per key.
 - **No command arguments.** A scheduled task without a description is named after its command without arguments: `php artisan report:send --token=secret` is `report:send`. Arguments can change on each run, and they can hold a secret. Leading variable assignments, such as `TOKEN=secret backup.sh`, are dropped too.
 - **Trimmed anonymous classes.** The name of an anonymous exception class holds a file path and a NUL byte. `exception.type` keeps only the part up to `@anonymous`.
 
-Some built-in attributes are bounded by your code, not by the package. `laravel.job.name` has one value per job class, and `messaging.destination.name` has one value per queue. An application that creates queues at runtime, for example one per tenant, makes the second one unbounded.
+Some built-in attributes are bounded by your code, not by the package. `laravel.job.name` has one value per job class, `laravel.eloquent.model` one per model class, and `messaging.destination.name` has one value per queue. An application that creates queues at runtime, for example one per tenant, makes the second one unbounded.
 
 ## Contributed attributes
 

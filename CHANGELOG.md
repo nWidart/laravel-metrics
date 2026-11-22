@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-11-22
 
 - Added database and Eloquent metrics:
   - `laravel.db.transaction.duration`, per outer transaction, with `laravel.db.transaction.result` = `committed` or `rolled_back`;

@@ -20,7 +20,7 @@ $metrics = Metrics::fake();
 
 The in-memory store follows the merge rules of the real stores. Its cardinality limit is 2000 series per metric, whatever [`cardinality_limit`](/laravel-metrics/reference/configuration/#cardinality_limit) is. It needs no Redis and holds only what the test records.
 
-Instruments created before the call keep the previous meter provider.
+Instruments created before the call keep the previous meter provider. Eloquent models counted before the call but not yet flushed go to the previous provider too, so the fake starts without them.
 
 ## Matching rules
 

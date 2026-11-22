@@ -20,9 +20,9 @@ The conventions also set the attribute values. `db.system.name` is `postgresql`,
 
 ## Where the conventions stop
 
-The conventions define no metric for cache operations, scheduled tasks, reported exceptions, or the PHP runtime. Inventing a name that looks like a convention, such as `cache.operations`, would risk a clash when the conventions add one later. The package uses a namespace instead:
+The conventions define no metric for cache operations, transactions, queries per request, Eloquent models, scheduled tasks, reported exceptions, or the PHP runtime. Inventing a name that looks like a convention, such as `cache.operations`, would risk a clash when the conventions add one later. The package uses a namespace instead:
 
-- **`laravel.*`** for what is specific to Laravel: `laravel.cache.operations`, `laravel.scheduler.task.duration`, `laravel.exceptions` and `laravel.info`. Their attributes use the same namespace, such as `laravel.cache.store`.
+- **`laravel.*`** for what is specific to Laravel: `laravel.cache.operations`, `laravel.db.transaction.duration`, `laravel.db.queries`, `laravel.db.server.connections`, `laravel.db.migrations.pending`, `laravel.eloquent.models`, `laravel.scheduler.task.duration`, `laravel.exceptions` and `laravel.info`. Their attributes use the same namespace, such as `laravel.cache.store`. The database ones keep the connection attributes of the conventions, such as `db.system.name`.
 - **`php.*`** for the PHP runtime: `php.opcache.*` and `php.fpm.*`. Other runtimes do the same: the conventions have `jvm.*` for Java and `v8js.*` for Node.js.
 
 Two names come from elsewhere:
@@ -39,7 +39,8 @@ Every duration is in seconds (`s`), as the conventions require. Sizes are in byt
 A histogram needs bucket boundaries, and the store can only merge values with the same boundaries. The package therefore fixes the boundaries of each built-in histogram:
 
 - HTTP requests and queue jobs use the boundaries the conventions advise, from 5 ms to 10 s.
-- Queries use the boundaries the conventions advise for database clients, from 1 ms to 10 s.
+- Queries and transactions use the boundaries the conventions advise for database clients, from 1 ms to 10 s.
+- Queries per request or job count queries, not time: from 0 to 1000.
 - Scheduled tasks run for up to minutes, so they use wider boundaries, from 0.1 s to 900 s.
 
 The boundaries are part of the metric's identity in the store. A histogram with other boundaries is another metric. This is also why your own histograms need explicit boundaries: the SDK default runs from 0 to 10000, which suits milliseconds, not seconds.

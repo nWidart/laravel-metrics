@@ -43,7 +43,7 @@ If you run Redis yourself, prefer a glibc build to an Alpine (musl) build. Float
 ## 4. Stop recording what you do not read
 
 - Ignore the routes that probes and scrapers call often. See [Ignore routes](/laravel-metrics/guides/ignore-routes/).
-- Turn off the instrumentation you do not use, such as `METRICS_CACHE=false`. A busy cache dispatches many events per request. See [Turn off instrumentation](/laravel-metrics/guides/turn-off-instrumentation/).
+- Turn off the instrumentation you do not use, such as `METRICS_CACHE=false`. A busy cache dispatches many events per request, and so does Eloquent: one event per model a query returns. See [Turn off instrumentation](/laravel-metrics/guides/turn-off-instrumentation/).
 
 ## 5. Keep attribute values few
 

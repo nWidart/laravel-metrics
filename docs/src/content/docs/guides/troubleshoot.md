@@ -42,7 +42,7 @@ The store cannot be built or read. The cause is reported through the exception h
 
 ## A metric is missing
 
-- **Its instrumentation is off.** Check `METRICS_HTTP`, `METRICS_DB`, `METRICS_QUEUE`, `METRICS_CACHE`, `METRICS_SCHEDULER`, `METRICS_EXCEPTIONS` and `METRICS_RUNTIME`.
+- **Its instrumentation is off.** Check `METRICS_HTTP`, `METRICS_DB`, `METRICS_ELOQUENT`, `METRICS_QUEUE`, `METRICS_CACHE`, `METRICS_SCHEDULER`, `METRICS_EXCEPTIONS`, `METRICS_RUNTIME`, `METRICS_DB_SERVER` and `METRICS_MIGRATIONS`.
 - **A filter leaves it out.** Look for `Metrics::exclude()` calls.
 - **The event never happens.** Each built-in metric has cases it does not record, such as failed queries or unreported exceptions. See the page of the metric under [Built-in metrics](/laravel-metrics/reference/metrics/http/).
 - **The command or daemon has not ended.** A long command merges when it ends. Call `Metrics::flush()`. See [Flush in long-running work](/laravel-metrics/guides/flush-long-running-work/).
