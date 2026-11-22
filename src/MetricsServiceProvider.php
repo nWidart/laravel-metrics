@@ -12,6 +12,8 @@ use Illuminate\Cache\Events\KeyWriteFailed;
 use Illuminate\Cache\Events\KeyWritten;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Contracts\Foundation\CachesRoutes;
+use Illuminate\Contracts\Routing\Registrar;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Queue\Events\JobExceptionOccurred;
@@ -21,6 +23,7 @@ use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Queue\Events\JobQueued;
 use Illuminate\Queue\Jobs\SyncJob;
 use Illuminate\Support\ServiceProvider;
+use Nwidart\Metrics\Http\PrometheusController;
 use Nwidart\Metrics\Instrumentation\CacheMetrics;
 use Nwidart\Metrics\Instrumentation\DatabaseClientMetrics;
 use Nwidart\Metrics\Instrumentation\HttpServerMetrics;
@@ -96,6 +99,8 @@ final class MetricsServiceProvider extends ServiceProvider
                 ->withMeterProvider($this->app->make(MeterProviderInterface::class)));
         }
 
+        $this->registerPrometheusRoute();
+
         // terminating() runs after PHP-FPM has sent the response (fastcgi_finish_request).
         $this->app->terminating(fn () => $this->flush());
 
@@ -132,6 +137,22 @@ final class MetricsServiceProvider extends ServiceProvider
                 }
             },
         );
+    }
+
+    /** Cached routes already hold this route, from the request that ran route:cache. */
+    private function registerPrometheusRoute(): void
+    {
+        $config = $this->config();
+        if (! $config->get('metrics.prometheus.enabled') || ($this->app instanceof CachesRoutes && $this->app->routesAreCached())) {
+            return;
+        }
+
+        $path = $config->get('metrics.prometheus.path');
+        $middleware = $config->get('metrics.prometheus.middleware');
+        $this->app->make(Registrar::class)
+            ->get(is_string($path) ? $path : 'metrics', PrometheusController::class)
+            ->middleware(array_values(array_filter(is_array($middleware) ? $middleware : [$middleware], is_string(...))))
+            ->name('metrics.prometheus');
     }
 
     /** Merges what was recorded since the last flush into the store. A failure never reaches the caller. */

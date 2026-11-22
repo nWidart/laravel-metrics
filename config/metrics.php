@@ -36,6 +36,19 @@ return [
     'register_global' => env('METRICS_REGISTER_GLOBAL', true),
 
     /*
+    | Serve the store in the Prometheus text format, at GET /{path}. Off by
+    | default: metrics can tell more about the application than it should
+    | share. Protect the route with middleware or with the network.
+    | The labels are added to every sample, e.g. ['service' => 'shop'].
+    */
+    'prometheus' => [
+        'enabled' => env('METRICS_PROMETHEUS', false),
+        'path' => env('METRICS_PROMETHEUS_PATH', 'metrics'),
+        'middleware' => [],
+        'labels' => [],
+    ],
+
+    /*
     | Built-in instrumentation, following the OpenTelemetry semantic
     | conventions where they define the metric.
     */
