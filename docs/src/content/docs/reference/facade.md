@@ -46,6 +46,9 @@ Adds a callback that contributes attributes to one built-in metric.
 |---|---|
 | `http.server.request.duration` | `Illuminate\Foundation\Http\Events\RequestHandled` |
 | `db.client.operation.duration` | `Illuminate\Database\Events\QueryExecuted` |
+| `laravel.db.transaction.duration` | `Illuminate\Database\Events\TransactionCommitted` or `TransactionRolledBack` |
+| `laravel.db.queries` | `Illuminate\Foundation\Http\Events\RequestHandled`, or `Illuminate\Queue\Events\JobProcessed`, `JobExceptionOccurred` or `JobTimedOut` |
+| `laravel.eloquent.models.pruned` | `Illuminate\Database\Events\ModelsPruned` |
 | `messaging.process.duration` | `Illuminate\Queue\Events\JobProcessed`, `JobExceptionOccurred` or `JobTimedOut` |
 | `messaging.client.sent.messages` | `Illuminate\Queue\Events\JobQueued` |
 | `laravel.cache.operations` | The `Illuminate\Cache\Events\CacheEvent`: `CacheHit`, `CacheMissed`, `KeyWritten`, `KeyWriteFailed`, `KeyForgotten` or `KeyForgetFailed` |

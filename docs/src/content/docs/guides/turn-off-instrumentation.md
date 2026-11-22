@@ -14,12 +14,15 @@ METRICS_CACHE=false
 | Variable | Stops |
 |---|---|
 | `METRICS_HTTP` | `http.server.request.duration` |
-| `METRICS_DB` | `db.client.operation.duration` |
+| `METRICS_DB` | `db.client.operation.duration`, `laravel.db.transaction.duration` and `laravel.db.queries` |
+| `METRICS_ELOQUENT` | `laravel.eloquent.models` and `laravel.eloquent.models.pruned` |
 | `METRICS_QUEUE` | `messaging.process.duration` and `messaging.client.sent.messages` |
 | `METRICS_CACHE` | `laravel.cache.operations` |
 | `METRICS_SCHEDULER` | `laravel.scheduler.task.duration` |
 | `METRICS_EXCEPTIONS` | `laravel.exceptions` |
 | `METRICS_RUNTIME` | The metrics read on export: `laravel.info`, OPcache, PHP-FPM, load average, disk usage |
+| `METRICS_DB_SERVER` | `laravel.db.server.connections` and `laravel.db.server.connections.max`, read on export |
+| `METRICS_MIGRATIONS` | `laravel.db.migrations.pending`, read on export |
 
 If the configuration is cached, run `php artisan config:cache` again. Then restart the queue workers with `php artisan queue:restart`, or `php artisan horizon:terminate` with Horizon.
 
