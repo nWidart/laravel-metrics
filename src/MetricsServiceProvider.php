@@ -8,11 +8,16 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Http\Events\RequestHandled;
+use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\Events\JobQueued;
+use Illuminate\Queue\Jobs\SyncJob;
 use Illuminate\Support\ServiceProvider;
 use Nwidart\Metrics\Instrumentation\DatabaseClientMetrics;
 use Nwidart\Metrics\Instrumentation\HttpServerMetrics;
+use Nwidart\Metrics\Instrumentation\QueueMetrics;
 use Nwidart\Metrics\Redis\LaravelRedisClient;
 use Nwidart\MetricsStore\RedisStore;
 use Nwidart\MetricsStore\StoreExporter;
@@ -63,6 +68,7 @@ final class MetricsServiceProvider extends ServiceProvider
         // Singletons: Laravel would otherwise build a listener, and its instrument, on every event.
         $this->app->singleton(HttpServerMetrics::class);
         $this->app->singleton(DatabaseClientMetrics::class);
+        $this->app->singleton(QueueMetrics::class);
     }
 
     public function boot(): void
@@ -86,15 +92,30 @@ final class MetricsServiceProvider extends ServiceProvider
         $this->app->terminating(fn () => $this->flush());
 
         $events = $this->app->make(Dispatcher::class);
-        // A queue worker runs many jobs in one process: merge after each one.
-        $events->listen([JobProcessed::class, JobFailed::class], fn () => $this->flush());
-
         if ($this->config()->get('metrics.instrumentation.http')) {
             $events->listen(RequestHandled::class, [HttpServerMetrics::class, 'handle']);
         }
         if ($this->config()->get('metrics.instrumentation.db')) {
             $events->listen(QueryExecuted::class, [DatabaseClientMetrics::class, 'handle']);
         }
+        if ($this->config()->get('metrics.instrumentation.queue')) {
+            $events->listen(JobQueued::class, [QueueMetrics::class, 'queued']);
+            $events->listen(JobProcessing::class, [QueueMetrics::class, 'processing']);
+            $events->listen(JobProcessed::class, [QueueMetrics::class, 'processed']);
+            $events->listen(JobExceptionOccurred::class, [QueueMetrics::class, 'exceptionOccurred']);
+        }
+
+        // A queue worker runs many jobs in one process: merge after each one. Registered after the
+        // instrumentation, so the job's own metrics are in this flush. A sync job runs inside the
+        // request or command that dispatched it, which flushes when it terminates.
+        $events->listen(
+            [JobProcessed::class, JobExceptionOccurred::class, JobFailed::class],
+            function (JobProcessed|JobExceptionOccurred|JobFailed $event): void {
+                if (! $event->job instanceof SyncJob) {
+                    $this->flush();
+                }
+            },
+        );
     }
 
     /** Merges what was recorded since the last flush into the store. A failure never reaches the caller. */

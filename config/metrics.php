@@ -44,6 +44,8 @@ return [
         'http' => env('METRICS_HTTP', true),
         // db.client.operation.duration, for every successful query
         'db' => env('METRICS_DB', true),
+        // messaging.process.duration and messaging.client.sent.messages
+        'queue' => env('METRICS_QUEUE', true),
     ],
 
 ];
