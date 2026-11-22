@@ -90,6 +90,9 @@ return [
         'scheduler' => env('METRICS_SCHEDULER', true),
         // laravel.exceptions, per reported exception class
         'exceptions' => env('METRICS_EXCEPTIONS', true),
+        // Read on export only (scrape, metrics:push), never stored: laravel.info,
+        // OPcache, PHP-FPM, load average and disk usage of the exporting server
+        'runtime' => env('METRICS_RUNTIME', true),
     ],
 
 ];

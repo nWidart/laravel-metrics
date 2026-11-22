@@ -6,6 +6,7 @@ namespace Nwidart\Metrics\Console;
 
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
+use Nwidart\Metrics\ExportTimeMetrics;
 use Nwidart\MetricsStore\MetricStore;
 use OpenTelemetry\SDK\Common\Attribute\Attributes;
 use OpenTelemetry\SDK\Metrics\MetricExporterInterface;
@@ -23,10 +24,11 @@ final class PushCommand extends Command
 
     protected $description = 'Send the stored metrics to the OTLP endpoint';
 
-    public function handle(MetricStore $store, Repository $config): int
+    public function handle(MetricStore $store, ExportTimeMetrics $exportTime, Repository $config): int
     {
         try {
-            $metrics = $store->collect($this->resource($config));
+            $resource = $this->resource($config);
+            $metrics = [...$store->collect($resource), ...$exportTime->collect($resource)];
         } catch (Throwable $e) {
             report($e);
             $this->components->error('The metrics store cannot be read: '.$e->getMessage());

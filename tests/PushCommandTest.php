@@ -19,6 +19,8 @@ final class PushCommandTest extends TestCase
     {
         parent::defineEnvironment($app);
         $app['config']->set('metrics.push.resource', ['service.name' => 'shop', 'deployment.environment.name' => '']);
+        // RuntimeMetricsTest covers the metrics read on export.
+        $app['config']->set('metrics.instrumentation.runtime', false);
     }
 
     #[Test]

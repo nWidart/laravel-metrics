@@ -54,6 +54,39 @@ The OpenTelemetry semantic conventions define no cache metrics, so `laravel.cach
 - `many` and `putMany` count one operation per key. `remember` counts a read, then a write on a miss.
 - A store with `'events' => false` in `config/cache.php` dispatches no events and is not counted. The memoized store (`Cache::memo()`) is not counted; the store under it is, on a memo miss. A failover store is counted under the name of the store that ran the operation.
 
+## Metrics read on export
+
+These are read when the metrics are exported (a scrape of `/metrics`, or `metrics:push`) and never stored. They describe the process and the server that export them, not the whole application. Requests pay nothing for them. Turn them off with `METRICS_RUNTIME=false`.
+
+| Metric | Attributes | Present when |
+|---|---|---|
+| `laravel.info` (gauge, 1) | `laravel.version`, `process.runtime.name`, `process.runtime.version`, `php.sapi` | Always |
+| `php.opcache.memory.usage` (bytes) | `php.opcache.memory.state`: `used`, `free`, `wasted` | OPcache runs |
+| `php.opcache.scripts` | | OPcache runs |
+| `php.opcache.lookups` (counter) | `php.opcache.lookup.result`: `hit`, `miss` | OPcache runs |
+| `php.fpm.processes` | `php.fpm.process.state`: `active`, `idle` | Under PHP-FPM |
+| `php.fpm.listen_queue` | | Under PHP-FPM |
+| `php.fpm.connections.accepted`, `php.fpm.max_children_reached`, `php.fpm.slow_requests` (counters) | | Under PHP-FPM |
+| `system.cpu.load_average.1m` | | Not on Windows |
+| `system.filesystem.usage` (bytes) | `system.filesystem.state`: `used`, `free` | The disk that holds the application |
+
+The semantic conventions define no PHP runtime metrics, so the PHP ones use a `php.` namespace, like `jvm.*` and `v8js.*`. `system.filesystem.usage` follows the conventions; `system.cpu.load_average.1m` is the name of the Collector's host metrics receiver. OPcache is off on the command line by default, so `metrics:push` usually has no OPcache metrics. There are no metrics for the exporting process itself (CPU time, memory), because each export runs in another short-lived process.
+
+Add your own with an observable instrument that is built at export time:
+
+```php
+use Nwidart\Metrics\ExportTimeMetrics;
+use OpenTelemetry\API\Metrics\MeterProviderInterface;
+use OpenTelemetry\API\Metrics\ObserverInterface;
+
+app(ExportTimeMetrics::class)->register(function (MeterProviderInterface $provider): void {
+    $provider->getMeter('app')->createObservableGauge('queue.size', '{job}', null, [],
+        fn (ObserverInterface $observer) => $observer->observe(Queue::size(), ['queue' => 'default']));
+});
+```
+
+A callback that throws is reported and skipped.
+
 ## Prometheus
 
 Turn on the scrape route with `METRICS_PROMETHEUS=true`. `GET /metrics` then serves the store in the Prometheus text format (version 0.0.4). The names follow the OpenTelemetry Prometheus compatibility rules: `http.server.request.duration` in seconds becomes `http_server_request_duration_seconds`, and a counter ends in `_total`. Every sample has the `otel_scope_name` label.

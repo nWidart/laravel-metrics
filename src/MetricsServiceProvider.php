@@ -39,6 +39,7 @@ use Nwidart\Metrics\Instrumentation\DatabaseClientMetrics;
 use Nwidart\Metrics\Instrumentation\ExceptionMetrics;
 use Nwidart\Metrics\Instrumentation\HttpServerMetrics;
 use Nwidart\Metrics\Instrumentation\QueueMetrics;
+use Nwidart\Metrics\Instrumentation\RuntimeMetrics;
 use Nwidart\Metrics\Instrumentation\SchedulerMetrics;
 use Nwidart\Metrics\Redis\LaravelRedisClient;
 use Nwidart\Metrics\Store\CacheStore;
@@ -132,6 +133,7 @@ final class MetricsServiceProvider extends ServiceProvider
         $this->app->singleton(CacheMetrics::class);
         $this->app->singleton(SchedulerMetrics::class);
         $this->app->singleton(ExceptionMetrics::class);
+        $this->app->singleton(ExportTimeMetrics::class);
     }
 
     public function boot(): void
@@ -187,6 +189,9 @@ final class MetricsServiceProvider extends ServiceProvider
         }
         if ($this->config()->get('metrics.instrumentation.exceptions')) {
             $this->countReportedExceptions();
+        }
+        if ($this->config()->get('metrics.instrumentation.runtime')) {
+            $this->app->make(ExportTimeMetrics::class)->register(fn (ApiMeterProvider $provider) => $this->app->make(RuntimeMetrics::class)($provider));
         }
 
         // A queue worker runs many jobs in one process: merge after each one. Registered after the

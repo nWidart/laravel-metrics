@@ -6,6 +6,7 @@ namespace Nwidart\Metrics\Http;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Http\Response;
+use Nwidart\Metrics\ExportTimeMetrics;
 use Nwidart\MetricsStore\MetricStore;
 use Nwidart\MetricsStore\Prometheus\PrometheusTextFormat;
 use OpenTelemetry\SDK\Resource\ResourceInfoFactory;
@@ -17,10 +18,11 @@ use Throwable;
  */
 final class PrometheusController
 {
-    public function __invoke(MetricStore $store, PrometheusTextFormat $format, Repository $config): Response
+    public function __invoke(MetricStore $store, ExportTimeMetrics $exportTime, PrometheusTextFormat $format, Repository $config): Response
     {
         try {
             $metrics = $store->collect(ResourceInfoFactory::emptyResource());
+            $observed = $exportTime->collect(ResourceInfoFactory::emptyResource());
         } catch (Throwable $e) {
             report($e);
 
@@ -35,6 +37,6 @@ final class PrometheusController
             }
         }
 
-        return new Response($format->render($metrics, $labels), 200, ['Content-Type' => PrometheusTextFormat::CONTENT_TYPE]);
+        return new Response($format->render([...$metrics, ...$observed], $labels), 200, ['Content-Type' => PrometheusTextFormat::CONTENT_TYPE]);
     }
 }
