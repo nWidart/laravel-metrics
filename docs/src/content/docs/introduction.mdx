@@ -8,12 +8,14 @@ import { LinkCard, CardGrid } from '@astrojs/starlight/components';
 Laravel Metrics records OpenTelemetry metrics in a Laravel application, and it works under PHP-FPM. Install it, and it answers the questions that you ask about a running application:
 
 - **How many requests does it serve, and how fast?** Per route, method and status code.
-- **How much time goes to the database?** Per connection and operation.
+- **How much time goes to the database?** Per connection and operation, with the transactions that roll back.
+- **Which routes and jobs run too many queries?** The queries per request and per job, where N+1 queries show up.
+- **How many Eloquent models does it load and change?** Per model class.
 - **Do the queue jobs keep up?** Jobs sent and processed, with their duration and their failures.
 - **Does the cache help?** Hits, misses, writes and deletes, per store.
 - **Do the scheduled tasks run, and do they fail?**
 - **Which exceptions does it report, and how often?**
-- **How does the server look?** OPcache, PHP-FPM workers, load average and disk space.
+- **How does the server look?** OPcache, PHP-FPM workers, load average and disk space, the database server's connections, and the migrations that have not run.
 
 You write no code for these. You can add metrics of your own through the OpenTelemetry API.
 
@@ -27,11 +29,15 @@ The OpenTelemetry SDK keeps metrics in the memory of one process. Under PHP-FPM,
 |---|---|---|
 | `http.server.request.duration` | Each HTTP request | [HTTP requests](/laravel-metrics/reference/metrics/http/) |
 | `db.client.operation.duration` | Each successful query | [Database queries](/laravel-metrics/reference/metrics/database/) |
+| `laravel.db.transaction.duration` | Each outer transaction | [Database transactions](/laravel-metrics/reference/metrics/transactions/) |
+| `laravel.db.queries` | The queries of each request and job | [Queries per request and per job](/laravel-metrics/reference/metrics/query-count/) |
+| `laravel.eloquent.models`, `laravel.eloquent.models.pruned` | Each model retrieved, created, updated, deleted, restored or pruned | [Eloquent models](/laravel-metrics/reference/metrics/eloquent/) |
 | `messaging.process.duration`, `messaging.client.sent.messages` | Each job attempt, each job sent | [Queue jobs](/laravel-metrics/reference/metrics/queue/) |
 | `laravel.cache.operations` | Each cache read, write and delete | [Cache operations](/laravel-metrics/reference/metrics/cache/) |
 | `laravel.scheduler.task.duration` | Each run of a scheduled task | [Scheduled tasks](/laravel-metrics/reference/metrics/scheduler/) |
 | `laravel.exceptions` | Each reported exception | [Exceptions](/laravel-metrics/reference/metrics/exceptions/) |
 | `laravel.info`, `php.opcache.*`, `php.fpm.*`, `system.*` | Read when the metrics are exported | [Metrics read on export](/laravel-metrics/reference/metrics/export-time/) |
+| `laravel.db.server.connections`, `laravel.db.migrations.pending` | Read when the metrics are exported | [Database server and migrations](/laravel-metrics/reference/metrics/database-server/) |
 
 The names follow the [OpenTelemetry semantic conventions](/laravel-metrics/explanation/naming/) where they define the metric. Each group has its own switch.
 
