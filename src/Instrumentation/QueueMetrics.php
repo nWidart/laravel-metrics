@@ -10,6 +10,8 @@ use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Queue\Events\JobQueued;
+use Illuminate\Queue\Events\JobTimedOut;
+use Illuminate\Queue\TimeoutExceededException;
 use OpenTelemetry\API\Metrics\CounterInterface;
 use OpenTelemetry\API\Metrics\HistogramInterface;
 use OpenTelemetry\API\Metrics\MeterProviderInterface;
@@ -17,7 +19,8 @@ use OpenTelemetry\API\Metrics\MeterProviderInterface;
 /**
  * Records queue jobs, as the OpenTelemetry messaging semantic conventions define it:
  *   messaging.process.duration       one value per attempt, from JobProcessing to JobProcessed, or
- *                                    to JobExceptionOccurred with error.type set to the exception class
+ *                                    to JobExceptionOccurred with error.type set to the exception class,
+ *                                    or to JobTimedOut with error.type TimeoutExceededException
  *   messaging.client.sent.messages   one per job pushed to a queue (JobQueued)
  * The worker and the sync queue both dispatch these events. laravel.job.name is the job class
  * (or display name), which the conventions do not define but which says what ran.
@@ -66,6 +69,12 @@ final class QueueMetrics
     public function exceptionOccurred(JobExceptionOccurred $event): void
     {
         $this->recordProcess($event->connectionName, $event->job, $event->exception::class);
+    }
+
+    /** The worker stopped the attempt at its timeout, and kills itself next. */
+    public function timedOut(JobTimedOut $event): void
+    {
+        $this->recordProcess($event->connectionName, $event->job, TimeoutExceededException::class);
     }
 
     public function queued(JobQueued $event): void

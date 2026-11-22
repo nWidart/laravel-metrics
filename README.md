@@ -35,11 +35,17 @@ By default the package's meter provider is also the OpenTelemetry global (`Globa
 | `db.client.operation.duration` (histogram, seconds) | `db.system.name`, `db.namespace`, `db.operation.name`, `server.address`, `server.port` |
 | `messaging.process.duration` (histogram, seconds) | `messaging.system`, `messaging.operation.name` (`process`), `messaging.destination.name`, `laravel.job.name`, `error.type` |
 | `messaging.client.sent.messages` (counter) | `messaging.system`, `messaging.operation.name` (`send`), `messaging.destination.name`, `laravel.job.name` |
+| `laravel.scheduler.task.duration` (histogram, seconds) | `laravel.scheduler.task.name`, `error.type` |
+| `laravel.exceptions` (counter) | `exception.type` |
 | `laravel.cache.operations` (counter) | `laravel.cache.store`, `laravel.cache.operation` (`read`, `write`, `delete`), `laravel.cache.result` (`hit`, `miss`, `success`, `failure`) |
 
 The database listener costs about 2 µs per query. Laravel dispatches no event for a failed query, so failed queries are not recorded.
 
-`messaging.process.duration` has one value per attempt. An attempt that throws has the exception class as `error.type`; a job that fails itself, or has no attempts left, has `error.type` = `failed`. `laravel.job.name` is the job class, which the conventions do not define. A queue worker merges after each job; a sync job merges with the request or command that dispatched it.
+`messaging.process.duration` has one value per attempt. An attempt that throws has the exception class as `error.type`; a job that fails itself, or has no attempts left, has `error.type` = `failed`; an attempt that the worker stops at its timeout has `error.type` = `Illuminate\Queue\TimeoutExceededException`, and is merged before the worker exits. `laravel.job.name` is the job class, which the conventions do not define. A queue worker merges after each job; a sync job merges with the request or command that dispatched it.
+
+`laravel.scheduler.task.duration` has one value per run of a scheduled task. `laravel.scheduler.task.name` is the task's description, or its command without arguments (`php artisan report:send --token=secret` is `report:send`), because arguments can hold a secret and change on each run. Give two tasks that run one command a `description()` to tell them apart. `error.type` is the exception class when the task threw, and `failed` when its command exited with another code than 0. A task skipped by `withoutOverlapping()` is not recorded; a background task is timed until it has started.
+
+`laravel.exceptions` counts the exceptions the application reports, by class (`exception.type`). Exceptions Laravel does not report, such as a 404 or a validation failure, are not counted; nor is an exception with its own `report()` method, or one that an earlier `reportable()` callback stops.
 
 The OpenTelemetry semantic conventions define no cache metrics, so `laravel.cache.operations` and its attributes use the `laravel.` namespace. It counts Laravel's cache events, per store: a read is a hit or a miss, and a write or a delete is a success or a failure. The hit ratio is `hit / (hit + miss)`. The cache key is never an attribute. The listener costs about 1.5 µs per cache event, and about 3 µs with Laravel's event dispatch. Limits:
 

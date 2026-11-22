@@ -5,6 +5,12 @@ declare(strict_types=1);
 namespace Nwidart\Metrics\Tests;
 
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Contracts\Queue\Job;
+use Illuminate\Queue\Events\JobExceptionOccurred;
+use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\Events\JobTimedOut;
+use Illuminate\Queue\TimeoutExceededException;
+use Mockery;
 use Nwidart\Metrics\Tests\Fixtures\ShipOrder;
 use OpenTelemetry\SDK\Metrics\Data\Sum;
 use Orchestra\Testbench\Attributes\DefineEnvironment;
@@ -90,6 +96,28 @@ final class QueueMetricsTest extends TestCase
         $this->app->terminate();
         $sent = $this->sum('messaging.client.sent.messages');
         $this->assertSame([['laravel.job.name' => ShipOrder::class, 'messaging.destination.name' => self::QUEUE, 'messaging.operation.name' => 'send', 'messaging.system' => 'redis'], 2], $sent);
+    }
+
+    #[Test]
+    public function a_timed_out_attempt_is_recorded_once_and_merged_before_the_worker_dies(): void
+    {
+        $job = Mockery::mock(Job::class);
+        $job->allows('getQueue')->andReturn(self::QUEUE);
+        $job->allows('resolveName')->andReturn(ShipOrder::class);
+        $job->allows('hasFailed')->andReturn(true);
+        $job->allows('payload')->andReturn([]);
+
+        event(new JobProcessing('redis', $job));
+        event(new JobTimedOut('redis', $job));
+        // Without terminate(): the worker kills itself after JobTimedOut, so the flush runs on it.
+        $points = $this->histogramPoints('messaging.process.duration');
+        // When the worker is told not to die, the exception follows; it is not a second attempt.
+        event(new JobExceptionOccurred('redis', $job, new RuntimeException('timed out')));
+        $this->app->terminate();
+
+        $this->assertCount(1, $points);
+        $this->assertSame(TimeoutExceededException::class, $points[0]->attributes->get('error.type'));
+        $this->assertSame(1, $this->histogramPoints('messaging.process.duration')[0]->count);
     }
 
     #[Test]

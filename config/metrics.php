@@ -86,6 +86,10 @@ return [
         'queue' => env('METRICS_QUEUE', true),
         // laravel.cache.operations: reads (hit, miss), writes and deletes, per store
         'cache' => env('METRICS_CACHE', true),
+        // laravel.scheduler.task.duration, per scheduled task run
+        'scheduler' => env('METRICS_SCHEDULER', true),
+        // laravel.exceptions, per reported exception class
+        'exceptions' => env('METRICS_EXCEPTIONS', true),
     ],
 
 ];

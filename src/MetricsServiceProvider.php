@@ -10,19 +10,25 @@ use Illuminate\Cache\Events\KeyForgetFailed;
 use Illuminate\Cache\Events\KeyForgotten;
 use Illuminate\Cache\Events\KeyWriteFailed;
 use Illuminate\Cache\Events\KeyWritten;
+use Illuminate\Console\Events\ScheduledTaskFailed;
+use Illuminate\Console\Events\ScheduledTaskFinished;
+use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\CachesRoutes;
 use Illuminate\Contracts\Routing\Registrar;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Foundation\Exceptions\Handler;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Queue\Events\JobQueued;
+use Illuminate\Queue\Events\JobTimedOut;
 use Illuminate\Queue\Jobs\SyncJob;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
@@ -30,8 +36,10 @@ use Nwidart\Metrics\Console\PushCommand;
 use Nwidart\Metrics\Http\PrometheusController;
 use Nwidart\Metrics\Instrumentation\CacheMetrics;
 use Nwidart\Metrics\Instrumentation\DatabaseClientMetrics;
+use Nwidart\Metrics\Instrumentation\ExceptionMetrics;
 use Nwidart\Metrics\Instrumentation\HttpServerMetrics;
 use Nwidart\Metrics\Instrumentation\QueueMetrics;
+use Nwidart\Metrics\Instrumentation\SchedulerMetrics;
 use Nwidart\Metrics\Redis\LaravelRedisClient;
 use Nwidart\Metrics\Store\CacheStore;
 use Nwidart\MetricsStore\MetricStore;
@@ -122,6 +130,8 @@ final class MetricsServiceProvider extends ServiceProvider
         $this->app->singleton(DatabaseClientMetrics::class);
         $this->app->singleton(QueueMetrics::class);
         $this->app->singleton(CacheMetrics::class);
+        $this->app->singleton(SchedulerMetrics::class);
+        $this->app->singleton(ExceptionMetrics::class);
     }
 
     public function boot(): void
@@ -160,6 +170,7 @@ final class MetricsServiceProvider extends ServiceProvider
             $events->listen(JobProcessing::class, [QueueMetrics::class, 'processing']);
             $events->listen(JobProcessed::class, [QueueMetrics::class, 'processed']);
             $events->listen(JobExceptionOccurred::class, [QueueMetrics::class, 'exceptionOccurred']);
+            $events->listen(JobTimedOut::class, [QueueMetrics::class, 'timedOut']);
         }
         if ($this->config()->get('metrics.instrumentation.cache')) {
             $events->listen(CacheHit::class, [CacheMetrics::class, 'hit']);
@@ -169,18 +180,44 @@ final class MetricsServiceProvider extends ServiceProvider
             $events->listen(KeyForgotten::class, [CacheMetrics::class, 'forgotten']);
             $events->listen(KeyForgetFailed::class, [CacheMetrics::class, 'forgetFailed']);
         }
+        if ($this->config()->get('metrics.instrumentation.scheduler')) {
+            $events->listen(ScheduledTaskStarting::class, [SchedulerMetrics::class, 'starting']);
+            $events->listen(ScheduledTaskFinished::class, [SchedulerMetrics::class, 'finished']);
+            $events->listen(ScheduledTaskFailed::class, [SchedulerMetrics::class, 'failed']);
+        }
+        if ($this->config()->get('metrics.instrumentation.exceptions')) {
+            $this->countReportedExceptions();
+        }
 
         // A queue worker runs many jobs in one process: merge after each one. Registered after the
         // instrumentation, so the job's own metrics are in this flush. A sync job runs inside the
         // request or command that dispatched it, which flushes when it terminates.
+        // The worker kills itself right after JobTimedOut.
         $events->listen(
-            [JobProcessed::class, JobExceptionOccurred::class, JobFailed::class],
-            function (JobProcessed|JobExceptionOccurred|JobFailed $event): void {
+            [JobProcessed::class, JobExceptionOccurred::class, JobFailed::class, JobTimedOut::class],
+            function (JobProcessed|JobExceptionOccurred|JobFailed|JobTimedOut $event): void {
                 if (! $event->job instanceof SyncJob) {
                     $this->flush();
                 }
             },
         );
+    }
+
+    /** The handler is built only when it is first needed, which is usually never. */
+    private function countReportedExceptions(): void
+    {
+        $count = function (ExceptionHandler $handler): void {
+            if ($handler instanceof Handler) {
+                $handler->reportable(function (Throwable $e): void {
+                    $this->app->make(ExceptionMetrics::class)->report($e);
+                });
+            }
+        };
+
+        $this->app->afterResolving(ExceptionHandler::class, $count);
+        if ($this->app->resolved(ExceptionHandler::class)) {
+            $count($this->app->make(ExceptionHandler::class));
+        }
     }
 
     /** Cached routes already hold this route, from the request that ran route:cache. */
