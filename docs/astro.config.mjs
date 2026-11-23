@@ -13,7 +13,7 @@ export default defineConfig({
 		starlight({
 			title: 'Laravel Metrics',
 			description:
-				'OpenTelemetry metrics for Laravel that work under PHP-FPM, with zero-code HTTP, database, queue and cache instrumentation.',
+				'OpenTelemetry metrics for Laravel that work under PHP-FPM and Laravel Octane, with zero-code HTTP, database, queue and cache instrumentation.',
 			favicon: '/favicon.svg',
 			social: [
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/nWidart/laravel-metrics' },
@@ -29,7 +29,7 @@ export default defineConfig({
 				starlightLlmsTxt({
 					projectName: 'Laravel Metrics',
 					description:
-						'nwidart/laravel-metrics records OpenTelemetry metrics in Laravel applications under PHP-FPM, merges each request into a shared Redis store, and exports the cumulative values to Prometheus or over OTLP.',
+						'nwidart/laravel-metrics records OpenTelemetry metrics in Laravel applications under PHP-FPM and Laravel Octane, merges each request into a shared Redis store, and exports the cumulative values to Prometheus or over OTLP.',
 				}),
 			],
 			sidebar: [

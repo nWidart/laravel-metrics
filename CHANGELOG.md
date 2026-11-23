@@ -2,12 +2,12 @@
 
 ## 1.1.0 - 2026-11-23
 
-- Laravel Octane is supported. Requests, tasks and ticks run through Octane's worker in the tests.
-- Fixed, under Octane: metrics recorded in a request before any built-in listener ran, such as a custom counter at the start of the first request, went to a meter provider that no flush read, and were lost. The worker now builds one meter provider when it starts.
-- Fixed, under Octane: `laravel.db.queries` counted the queries that ran after the previous response, or while the worker booted, for the next request. The count now starts when the previous request, task or tick has ended, so queries of an application's own `RequestReceived` listeners count for their request.
-- Fixed, under Octane: tasks and ticks never merged their metrics. They now merge when they end, including a task or tick that fails, and a stopping worker merges what is left. A request also merges what its own `terminating` callbacks record.
-- Fixed: with the `cache` store on the `database` cache driver, the database instrumentation recorded the store's own queries, and the next flush merged them. In a queue worker or an Octane worker, every flush added queries to `db.client.operation.duration`. The store's queries are no longer recorded.
-- Fixed: a connection purged and built again for another database, such as a tenant connection, kept the `db.namespace`, `server.address` and `server.port` of the first database. Under Octane this lasted for the life of the worker. The attributes are now computed per connection object.
+- Added Laravel Octane support.
+- Fixed, under Octane: metrics recorded early in a request could be lost.
+- Fixed, under Octane: `laravel.db.queries` counted queries from outside the request.
+- Fixed, under Octane: tasks and ticks never merged their metrics.
+- Fixed: the `database` cache store recorded its own queries.
+- Fixed: a tenant connection kept the first database's attributes.
 
 ## 1.0.0 - 2026-11-23
 

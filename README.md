@@ -4,7 +4,7 @@
 [![Latest version](https://img.shields.io/packagist/v/nwidart/laravel-metrics)](https://packagist.org/packages/nwidart/laravel-metrics)
 [![License](https://img.shields.io/packagist/l/nwidart/laravel-metrics)](LICENSE.md)
 
-OpenTelemetry metrics for Laravel that work under PHP-FPM.
+OpenTelemetry metrics for Laravel that work under PHP-FPM and Laravel Octane.
 
 The package records HTTP requests, queries, transactions, Eloquent models, queue jobs, cache operations, scheduled tasks and exceptions with no code. Each request records in memory and merges into Redis after the response. Serve the metrics to Prometheus, or push them over OTLP.
 
