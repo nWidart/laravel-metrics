@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nwidart\Metrics;
 
+use Illuminate\Cache\DatabaseStore;
 use Illuminate\Cache\Events\CacheHit;
 use Illuminate\Cache\Events\CacheMissed;
 use Illuminate\Cache\Events\KeyForgetFailed;
@@ -21,6 +22,8 @@ use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Contracts\Foundation\CachesRoutes;
 use Illuminate\Contracts\Routing\Registrar;
+use Illuminate\Database\Connection;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Events\ModelsPruned;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\Events\TransactionBeginning;
@@ -214,7 +217,6 @@ final class MetricsServiceProvider extends ServiceProvider
             $events->listen(TransactionCommitted::class, [DatabaseTransactionMetrics::class, 'committed']);
             $events->listen(TransactionRolledBack::class, [DatabaseTransactionMetrics::class, 'rolledBack']);
             $events->listen(QueryExecuted::class, [DatabaseQueryCountMetrics::class, 'query']);
-            $events->listen(self::OCTANE_EVENTS.'RequestReceived', [DatabaseQueryCountMetrics::class, 'requestReceived']);
             $events->listen(RequestHandled::class, [DatabaseQueryCountMetrics::class, 'requestHandled']);
             $events->listen(JobProcessing::class, [DatabaseQueryCountMetrics::class, 'jobProcessing']);
             $events->listen([JobProcessed::class, JobExceptionOccurred::class, JobTimedOut::class], [DatabaseQueryCountMetrics::class, 'jobEnded']);
@@ -284,26 +286,44 @@ final class MetricsServiceProvider extends ServiceProvider
     }
 
     /**
-     * Laravel Octane boots the application once per worker and handles each request in a clone of
-     * it. A request flushes when it terminates, as under PHP-FPM. The events are named, not
-     * imported: Octane is optional, and without it they never fire.
+     * Laravel Octane boots the application once per worker and handles each request, task and
+     * tick in a clone of it. The events are named, not imported: Octane is optional, and without
+     * it they never fire.
      */
     private function supportOctane(Dispatcher $events): void
     {
-        // A clone shares what the application had resolved before it was cloned, and forgets what
-        // it resolved itself. Resolved here, the meter provider and the Metrics entry point are the
-        // worker's: every request records into the one provider that the flush reads, and
-        // Metrics::attributes() and Metrics::exclude() reach the instances the worker keeps.
-        $events->listen(self::OCTANE_EVENTS.'WorkerStarting', function (): void {
+        $events->listen(self::OCTANE_EVENTS.'WorkerStarting', function () use ($events): void {
+            // A clone shares what the application had resolved before it was cloned, and forgets
+            // what it resolved itself. Resolved here, the meter provider and the Metrics entry
+            // point are the worker's: every request records into the one provider that the flush
+            // reads, and Metrics::attributes() and Metrics::exclude() reach the worker's instances.
             $this->app->make(MeterProviderInterface::class);
             $this->app->make(Metrics::class);
-        });
+            $this->endOctaneOperation();
 
-        // Tasks and ticks never terminate the application. A stopping worker merges what is left.
-        $events->listen(
-            [self::OCTANE_EVENTS.'TaskTerminated', self::OCTANE_EVENTS.'TickTerminated', self::OCTANE_EVENTS.'WorkerStopping'],
-            fn () => $this->flush(),
-        );
+            // Registered now, after the listeners the application registered while it booted, so
+            // that it runs last: after the request's terminating callbacks, and after Octane has
+            // reported the exception of a failed task or tick, which dispatches no "terminated".
+            $events->listen([
+                self::OCTANE_EVENTS.'RequestTerminated',
+                self::OCTANE_EVENTS.'TaskTerminated',
+                self::OCTANE_EVENTS.'TickTerminated',
+                self::OCTANE_EVENTS.'WorkerErrorOccurred',
+                self::OCTANE_EVENTS.'WorkerStopping',
+            ], fn () => $this->endOctaneOperation());
+        });
+    }
+
+    /**
+     * Merges what the operation recorded. The queries that run from here to the next request, such
+     * as the worker's own, belong to no request: the next count starts now.
+     */
+    private function endOctaneOperation(): void
+    {
+        $this->flush();
+        if ($this->app->resolved(DatabaseQueryCountMetrics::class)) {
+            $this->app->make(DatabaseQueryCountMetrics::class)->reset();
+        }
     }
 
     /**
@@ -376,8 +396,40 @@ final class MetricsServiceProvider extends ServiceProvider
         if (! $store instanceof LockProvider) {
             throw new InvalidArgumentException('The metrics cache store must support locks (every Laravel cache driver except apc does).');
         }
+        if ($store instanceof DatabaseStore) {
+            $store = $this->withoutQueryEvents($store);
+        }
 
         return new CacheStore($store, $prefix.'state', $limit);
+    }
+
+    /**
+     * A copy of a database cache store whose queries dispatch no QueryExecuted. The database
+     * instrumentation would otherwise record the queries of each merge, and the next merge would
+     * store them: in a queue worker or an Octane worker, every flush would add queries of its own.
+     */
+    private function withoutQueryEvents(DatabaseStore $store): DatabaseStore
+    {
+        $quiet = function (ConnectionInterface $connection): ConnectionInterface {
+            if (! $connection instanceof Connection) {
+                return $connection;
+            }
+            // Same database connection, no dispatcher.
+            $copy = clone $connection;
+            $copy->setPdo(fn () => $connection->getPdo());
+            $copy->setReadPdo(fn () => $connection->getReadPdo());
+            $copy->unsetEventDispatcher();
+
+            return $copy;
+        };
+
+        $store = clone $store;
+        $connection = $store->getConnection();
+        $lockConnection = $store->getLockConnection() ?? $connection;
+        $store->setConnection($copy = $quiet($connection));
+        $store->setLockConnection($lockConnection === $connection ? $copy : $quiet($lockConnection));
+
+        return $store;
     }
 
     private function enabled(): bool

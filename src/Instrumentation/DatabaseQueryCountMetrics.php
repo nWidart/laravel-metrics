@@ -49,10 +49,10 @@ final class DatabaseQueryCountMetrics
     }
 
     /**
-     * Under Laravel Octane, a worker serves many requests: the queries it ran since the last one,
-     * while it booted or after a response was sent, belong to no request.
+     * Starts the next count. Under Laravel Octane, a worker serves many requests: the queries it
+     * runs between two of them belong to neither.
      */
-    public function requestReceived(): void
+    public function reset(): void
     {
         $this->count = 0;
     }

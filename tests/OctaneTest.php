@@ -11,12 +11,15 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Laravel\Octane\ApplicationFactory;
+use Laravel\Octane\Events\RequestReceived;
+use Laravel\Octane\Octane;
 use Laravel\Octane\OctaneServiceProvider;
 use Laravel\Octane\RequestContext;
 use Laravel\Octane\Testing\Fakes\FakeClient;
 use Laravel\Octane\Testing\Fakes\FakeWorker;
 use Nwidart\Metrics\Facades\Metrics;
 use Nwidart\Metrics\MetricsServiceProvider;
+use Nwidart\Metrics\Tests\Fixtures\LookUpTenant;
 use Nwidart\Metrics\Tests\Fixtures\Order;
 use OpenTelemetry\API\Metrics\MeterProviderInterface;
 use Orchestra\Testbench\Attributes\DefineEnvironment;
@@ -53,8 +56,12 @@ final class OctaneTest extends TestCase
             self::$providers[] = spl_object_id(app(MeterProviderInterface::class));
             Metrics::meter()->createCounter('orders.listed')->add(1, array_filter(['page' => request()->query('page')]));
             Order::all();
-            // A query after the response is sent belongs to no request's count.
-            app()->terminating(fn () => DB::select('select 1'));
+            // After the response is sent: the query belongs to no request's count, and the counter
+            // is merged with the request.
+            app()->terminating(function (): void {
+                DB::select('select 1');
+                Metrics::meter()->createCounter('orders.terminated')->add(1);
+            });
 
             return 'ok';
         });
@@ -74,6 +81,16 @@ final class OctaneTest extends TestCase
     {
         $app['config']->set('metrics.instrumentation.db', false);
         $app['config']->set('metrics.instrumentation.eloquent', false);
+    }
+
+    /** An application listener that queries before the package's, as a tenancy package does. */
+    protected function withATenantLookup($app): void
+    {
+        $app['config']->set('octane.listeners.'.RequestReceived::class, [
+            ...Octane::prepareApplicationForNextOperation(),
+            ...Octane::prepareApplicationForNextRequest(),
+            LookUpTenant::class,
+        ]);
     }
 
     protected function ignoringUp($app): void
@@ -108,6 +125,7 @@ final class OctaneTest extends TestCase
             $this->assertCount(1, $points);
             $this->assertSame($handled, $points[0]->count);
             $this->assertSame([[[], $handled]], $this->sums('orders.listed'));
+            $this->assertSame([[[], $handled]], $this->sums('orders.terminated'));
         }
     }
 
@@ -147,6 +165,21 @@ final class OctaneTest extends TestCase
             [['laravel.eloquent.event' => 'created', 'laravel.eloquent.model' => Order::class], 2],
             [['laravel.eloquent.event' => 'retrieved', 'laravel.eloquent.model' => Order::class], 4],
         ], $this->sums('laravel.eloquent.models'));
+    }
+
+    #[Test]
+    #[DefineEnvironment('withATenantLookup')]
+    public function the_queries_of_application_listeners_count_for_their_request(): void
+    {
+        $worker = $this->worker();
+
+        $this->handle($worker, '/up');
+        $this->handle($worker, '/up');
+
+        $points = $this->histogramPoints('laravel.db.queries');
+        $this->assertCount(1, $points);
+        $this->assertSame(2, $points[0]->count);
+        $this->assertEquals(4, $points[0]->sum);
     }
 
     #[Test]
@@ -194,6 +227,23 @@ final class OctaneTest extends TestCase
         Metrics::meter()->createCounter('octane.ticks')->add(1);
         $worker->handleTick();
         $this->assertSame([[[], 1]], $this->sums('octane.ticks'));
+    }
+
+    #[Test]
+    public function a_failed_task_is_merged_with_its_exception(): void
+    {
+        $worker = $this->worker([
+            function (): void {
+                Metrics::meter()->createCounter('octane.tasks')->add(1);
+
+                throw new RuntimeException('task failed');
+            },
+        ]);
+
+        $worker->runTasks();
+
+        $this->assertSame([[[], 1]], $this->sums('octane.tasks'));
+        $this->assertSame([[['exception.type' => RuntimeException::class], 1]], $this->sums('laravel.exceptions'));
     }
 
     #[Test]
@@ -265,7 +315,7 @@ final class OctaneTest extends TestCase
 
     private static function tenantDatabase(string $tenant): string
     {
-        return sys_get_temp_dir().'/laravel-metrics-octane-tenant-'.$tenant.'.sqlite';
+        return sys_get_temp_dir().'/laravel-metrics-octane-'.getmypid().'-tenant-'.$tenant.'.sqlite';
     }
 
     private function handle(FakeWorker $worker, string $uri): void
