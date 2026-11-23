@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 - 2026-11-23
 
 - Laravel Octane is supported. Requests, tasks and ticks run through Octane's worker in the tests.
 - Fixed, under Octane: metrics recorded in a request before any built-in listener ran, such as a custom counter at the start of the first request, went to a meter provider that no flush read, and were lost. The worker now builds one meter provider when it starts.
