@@ -44,6 +44,7 @@ while (true) {
 - **Requests.** Each one flushes after the response is sent.
 - **Commands that end.** Each one flushes when it terminates.
 - **Queue workers and Horizon.** A worker flushes after each job, including a job that fails or times out.
+- **Laravel Octane.** Each request flushes when it terminates. Tasks and ticks flush when they end, and a stopping worker flushes what is left.
 - **Sync jobs.** They merge with the request or the command that dispatched them.
 
 ## On failure

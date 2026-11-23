@@ -48,6 +48,15 @@ final class DatabaseQueryCountMetrics
         $this->count++;
     }
 
+    /**
+     * Starts the next count. Under Laravel Octane, a worker serves many requests: the queries it
+     * runs between two of them belong to neither.
+     */
+    public function reset(): void
+    {
+        $this->count = 0;
+    }
+
     public function requestHandled(RequestHandled $event): void
     {
         $attributes = [];

@@ -9,7 +9,7 @@ Metrics are worth little if they slow down what they measure. This page explains
 
 A request pays for four things:
 
-- **Booting the SDK**, once per request that records: the meter provider, the reader and the instruments.
+- **Booting the SDK**, once per request that records: the meter provider, the reader and the instruments. Under Laravel Octane, once per worker.
 - **Recording**, in the built-in listeners and in your own code.
 - **One merge into the store**, after the response is sent.
 - **Nothing for the metrics read on export.** Requests only keep their callbacks.

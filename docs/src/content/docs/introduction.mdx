@@ -5,7 +5,7 @@ description: What Laravel Metrics is, what it records, where the metrics go, and
 
 import { LinkCard, CardGrid } from '@astrojs/starlight/components';
 
-Laravel Metrics records OpenTelemetry metrics in a Laravel application, and it works under PHP-FPM. Install it, and it answers the questions that you ask about a running application:
+Laravel Metrics records OpenTelemetry metrics in a Laravel application, and it works under PHP-FPM and Laravel Octane. Install it, and it answers the questions that you ask about a running application:
 
 - **How many requests does it serve, and how fast?** Per route, method and status code.
 - **How much time goes to the database?** Per connection and operation, with the transactions that roll back.
@@ -53,7 +53,7 @@ The package records from the first request. To send the metrics out, pick one wa
 ## What it does not do
 
 - It records metrics only: no traces and no logs.
-- It is not tested with Laravel Octane or Redis Cluster. See [Limits](/laravel-metrics/reference/limits/).
+- It is not tested with Redis Cluster. See [Limits](/laravel-metrics/reference/limits/).
 
 ## Requirements
 

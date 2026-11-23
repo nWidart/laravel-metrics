@@ -62,6 +62,8 @@ A request that records nothing never builds the meter provider, and a flush then
 
 **Sync jobs** run inside the request or command that dispatched them. They do not flush on their own: their metrics merge with the request or command when it terminates.
 
+**Laravel Octane** boots the application once per worker and handles each request in a clone of it. The worker keeps one meter provider, built when the worker starts, so a request does not pay the SDK boot. Each request flushes when it terminates, after Octane has sent the response, as under PHP-FPM. Octane tasks and ticks flush when they end, and a stopping worker flushes what is left. Swoole, RoadRunner and FrankenPHP behave the same: a worker handles one request at a time, and workers share nothing but the store.
+
 **Other long-running work**, such as a daemon command, merges only when it ends, unless it calls `Metrics::flush()`. See [Flush in long-running work](/laravel-metrics/guides/flush-long-running-work/).
 
 ## Why record through the OpenTelemetry API

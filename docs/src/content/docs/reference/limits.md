@@ -38,5 +38,6 @@ description: The known limits of the package and of its store, grouped by area.
 
 ## Runtimes
 
-- Laravel Octane is not tested.
+- Under Laravel Octane, the tests run requests, tasks and ticks through Octane's worker in the test process. CI does not start a Swoole, RoadRunner or FrankenPHP server.
+- Under Laravel Octane, call `Metrics::attributes()`, `Metrics::exclude()` and `Metrics::onExport()` only in the `boot()` method of a service provider. The worker keeps every callback, so a call made during each request adds one callback per request, without end.
 - Redis Cluster is not tested. A phpredis cluster connection is not supported: the merge fails and logs a warning.

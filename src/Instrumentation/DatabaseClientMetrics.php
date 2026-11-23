@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Nwidart\Metrics\Instrumentation;
 
+use Illuminate\Database\Connection;
 use Illuminate\Database\Events\QueryExecuted;
 use Nwidart\Metrics\AttributeContributors;
 use OpenTelemetry\API\Metrics\HistogramInterface;
 use OpenTelemetry\API\Metrics\MeterProviderInterface;
+use WeakMap;
 
 /**
  * Records db.client.operation.duration for every successful query, as the OpenTelemetry semantic
@@ -31,8 +33,13 @@ final class DatabaseClientMetrics
 
     private readonly HistogramInterface $duration;
 
-    /** @var array<string, array<non-empty-string, string|int>> connection name => attributes */
-    private array $connections = [];
+    /**
+     * Per connection object, not per name: a connection purged and built again, such as a
+     * tenant's, may point to another database. Under Octane it outlives the request.
+     *
+     * @var WeakMap<Connection, array<non-empty-string, string|int>>
+     */
+    private WeakMap $connections;
 
     public function __construct(MeterProviderInterface $meterProvider, private readonly AttributeContributors $contributors)
     {
@@ -42,11 +49,12 @@ final class DatabaseClientMetrics
             'Duration of database client operations.',
             ['ExplicitBucketBoundaries' => self::BUCKETS],
         );
+        $this->connections = new WeakMap;
     }
 
     public function handle(QueryExecuted $event): void
     {
-        $attributes = $this->connections[$event->connectionName] ??= ConnectionAttributes::of($event->connection);
+        $attributes = $this->connections[$event->connection] ??= ConnectionAttributes::of($event->connection);
 
         if (preg_match('/^\s*(?:\/\*.*?\*\/\s*)*([a-z]+)/is', $event->sql, $match) === 1) {
             $operation = strtoupper($match[1]);
