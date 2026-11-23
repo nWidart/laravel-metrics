@@ -19,7 +19,7 @@ The package does not need `ext-opentelemetry`.
 
 | Package | Constraint |
 |---|---|
-| `nwidart/metrics-store` | `^0.1.1` |
+| `nwidart/metrics-store` | `^1.0` |
 | `open-telemetry/sdk` | `^1.17` |
 | `open-telemetry/exporter-otlp` | `^1.6` |
 | `illuminate/contracts` | `^12.0\|^13.0` |

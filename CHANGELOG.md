@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0 - 2026-11-23
+
+First stable release, with no code changes since 0.3.0. From this version on, the public API follows semantic versioning: the `Metrics` facade, `Metrics::fake()`, the configuration keys, the `metrics:push` command and the names and attributes of the built-in metrics.
+
+- Requires `nwidart/metrics-store` `^1.0`.
+
 ## 0.3.0 - 2026-11-22
 
 - Added database and Eloquent metrics:
