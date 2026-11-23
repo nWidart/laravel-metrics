@@ -35,8 +35,13 @@ final class DatabaseTransactionMetrics
     /** @var WeakMap<Connection, list<int|float>> connection => starts of its outer transactions, from hrtime() */
     private WeakMap $started;
 
-    /** @var array<string, array<non-empty-string, string|int>> connection name => attributes */
-    private array $connections = [];
+    /**
+     * Per connection object, not per name: a connection purged and built again, such as a
+     * tenant's, may point to another database. Under Octane it outlives the request.
+     *
+     * @var WeakMap<Connection, array<non-empty-string, string|int>>
+     */
+    private WeakMap $connections;
 
     public function __construct(MeterProviderInterface $meterProvider, private readonly AttributeContributors $contributors)
     {
@@ -47,6 +52,7 @@ final class DatabaseTransactionMetrics
             ['ExplicitBucketBoundaries' => self::BUCKETS],
         );
         $this->started = new WeakMap;
+        $this->connections = new WeakMap;
     }
 
     public function began(TransactionBeginning $event): void
@@ -80,7 +86,7 @@ final class DatabaseTransactionMetrics
         $elapsed = (hrtime(true) - array_pop($starts)) / 1e9;
         $this->started[$connection] = $starts;
 
-        $attributes = $this->connections[$event->connectionName] ??= ConnectionAttributes::of($connection);
+        $attributes = $this->connections[$connection] ??= ConnectionAttributes::of($connection);
         $attributes['laravel.db.transaction.result'] = $result;
 
         $this->duration->record(max(0.0, $elapsed), [...$attributes, ...$this->contributors->for('laravel.db.transaction.duration', $event)]);

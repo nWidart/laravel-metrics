@@ -89,6 +89,9 @@ final class MetricsServiceProvider extends ServiceProvider
         ExceptionMetrics::class,
     ];
 
+    /** The namespace of Laravel Octane's events. */
+    private const OCTANE_EVENTS = 'Laravel\\Octane\\Events\\';
+
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/metrics.php', 'metrics');
@@ -108,8 +111,8 @@ final class MetricsServiceProvider extends ServiceProvider
             };
         });
 
-        // One provider per application instance, so one per PHP-FPM request. It keeps only the
-        // delta since the last flush; the store holds the cumulative values.
+        // One provider per application instance: one per PHP-FPM request, one per Octane worker.
+        // It keeps only the delta since the last flush; the store holds the cumulative values.
         $this->app->singleton(MeterProviderInterface::class, function (): MeterProviderInterface {
             if (! $this->enabled()) {
                 return new NoopMeterProvider;
@@ -211,6 +214,7 @@ final class MetricsServiceProvider extends ServiceProvider
             $events->listen(TransactionCommitted::class, [DatabaseTransactionMetrics::class, 'committed']);
             $events->listen(TransactionRolledBack::class, [DatabaseTransactionMetrics::class, 'rolledBack']);
             $events->listen(QueryExecuted::class, [DatabaseQueryCountMetrics::class, 'query']);
+            $events->listen(self::OCTANE_EVENTS.'RequestReceived', [DatabaseQueryCountMetrics::class, 'requestReceived']);
             $events->listen(RequestHandled::class, [DatabaseQueryCountMetrics::class, 'requestHandled']);
             $events->listen(JobProcessing::class, [DatabaseQueryCountMetrics::class, 'jobProcessing']);
             $events->listen([JobProcessed::class, JobExceptionOccurred::class, JobTimedOut::class], [DatabaseQueryCountMetrics::class, 'jobEnded']);
@@ -274,6 +278,31 @@ final class MetricsServiceProvider extends ServiceProvider
                     $this->flush();
                 }
             },
+        );
+
+        $this->supportOctane($events);
+    }
+
+    /**
+     * Laravel Octane boots the application once per worker and handles each request in a clone of
+     * it. A request flushes when it terminates, as under PHP-FPM. The events are named, not
+     * imported: Octane is optional, and without it they never fire.
+     */
+    private function supportOctane(Dispatcher $events): void
+    {
+        // A clone shares what the application had resolved before it was cloned, and forgets what
+        // it resolved itself. Resolved here, the meter provider and the Metrics entry point are the
+        // worker's: every request records into the one provider that the flush reads, and
+        // Metrics::attributes() and Metrics::exclude() reach the instances the worker keeps.
+        $events->listen(self::OCTANE_EVENTS.'WorkerStarting', function (): void {
+            $this->app->make(MeterProviderInterface::class);
+            $this->app->make(Metrics::class);
+        });
+
+        // Tasks and ticks never terminate the application. A stopping worker merges what is left.
+        $events->listen(
+            [self::OCTANE_EVENTS.'TaskTerminated', self::OCTANE_EVENTS.'TickTerminated', self::OCTANE_EVENTS.'WorkerStopping'],
+            fn () => $this->flush(),
         );
     }
 
