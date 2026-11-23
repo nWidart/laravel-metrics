@@ -1,11 +1,12 @@
 {
     "name": "nwidart/laravel-metrics",
-    "description": "OpenTelemetry metrics for Laravel that work under PHP-FPM, with zero-code HTTP, database, queue and cache instrumentation.",
+    "description": "OpenTelemetry metrics for Laravel that work under PHP-FPM and Laravel Octane, with zero-code HTTP, database, queue and cache instrumentation.",
     "keywords": [
         "laravel",
         "opentelemetry",
         "metrics",
         "php-fpm",
+        "octane",
         "prometheus",
         "otlp"
     ],

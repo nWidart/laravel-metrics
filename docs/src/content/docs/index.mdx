@@ -1,9 +1,9 @@
 ---
 title: Laravel Metrics
-description: OpenTelemetry metrics for Laravel that work under PHP-FPM. Zero-code HTTP, database, queue, cache, scheduler and exception metrics, served to Prometheus or pushed over OTLP.
+description: OpenTelemetry metrics for Laravel that work under PHP-FPM and Laravel Octane. Zero-code HTTP, database, queue, cache, scheduler and exception metrics, served to Prometheus or pushed over OTLP.
 template: splash
 hero:
-  tagline: OpenTelemetry metrics for Laravel that work under PHP-FPM. Install the package, and HTTP requests, queries, queue jobs, cache operations, scheduled tasks and exceptions are recorded with no code.
+  tagline: OpenTelemetry metrics for Laravel that work under PHP-FPM and Laravel Octane. Install the package, and HTTP requests, queries, queue jobs, cache operations, scheduled tasks and exceptions are recorded with no code.
   actions:
     - text: Get started
       link: /laravel-metrics/introduction/
@@ -29,7 +29,7 @@ composer require nwidart/laravel-metrics
 		transactions, queries per request, Eloquent models, cache operations, scheduled tasks and
 		reported exceptions, with the names of the OpenTelemetry semantic conventions.
 	</Card>
-	<Card title="Built for PHP-FPM" icon="setting">
+	<Card title="Built for PHP-FPM and Octane" icon="setting">
 		Each request records in memory, then merges into Redis after the response is sent. Every
 		worker and every host adds up in one store.
 	</Card>
