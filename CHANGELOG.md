@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Laravel Octane is supported. Requests, tasks and ticks run through Octane's worker in the tests.
+- Fixed, under Octane: metrics recorded in a request before any built-in listener ran, such as a custom counter at the start of the first request, went to a meter provider that no flush read, and were lost. The worker now builds one meter provider when it starts.
+- Fixed, under Octane: `laravel.db.queries` counted the queries that ran after the previous response, or while the worker booted, for the next request. The count now starts when Octane receives the request.
+- Fixed, under Octane: tasks and ticks never merged their metrics. They now merge when they end, and a stopping worker merges what is left.
+- Fixed: a connection purged and built again for another database, such as a tenant connection, kept the `db.namespace`, `server.address` and `server.port` of the first database. Under Octane this lasted for the life of the worker. The attributes are now computed per connection object.
+
 ## 1.0.0 - 2026-11-23
 
 First stable release, with no code changes since 0.3.0. From this version on, the public API follows semantic versioning: the `Metrics` facade, `Metrics::fake()`, the configuration keys, the `metrics:push` command and the names and attributes of the built-in metrics.

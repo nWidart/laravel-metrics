@@ -27,11 +27,11 @@ The package does not need `ext-opentelemetry`.
 
 ## Tested combinations
 
-CI runs the tests on PHP 8.2, 8.3, 8.4 and 8.5, with Laravel 12 and 13, at the lowest and the newest dependency versions. Laravel 13 is not tested on PHP 8.2. The tests use Redis 7.4.
+CI runs the tests on PHP 8.2, 8.3, 8.4 and 8.5, with Laravel 12 and 13, at the lowest and the newest dependency versions. Laravel 13 is not tested on PHP 8.2. The tests use Redis 7.4. Laravel Octane is tested by running requests, tasks and ticks through Octane's worker in the test process.
 
 ## Not tested
 
-- Laravel Octane.
+- Laravel Octane on a running Swoole, RoadRunner or FrankenPHP server.
 - Redis Cluster. A phpredis cluster connection is not supported.
 
 ## Service provider
